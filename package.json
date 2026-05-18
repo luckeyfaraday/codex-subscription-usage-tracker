@@ -1,0 +1,12 @@
+{
+  "name": "codex-limit-tracker",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}

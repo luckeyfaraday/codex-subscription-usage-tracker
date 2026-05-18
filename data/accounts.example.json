@@ -1,0 +1,28 @@
+{
+  "accounts": [
+    {
+      "id": "default",
+      "name": "Default Codex",
+      "provider": "codex",
+      "codexHome": "/home/you/.codex-accounts/account1",
+      "expectedEmail": "first-account@example.com",
+      "enabled": true
+    },
+    {
+      "id": "backup",
+      "name": "Backup Codex",
+      "provider": "codex",
+      "codexHome": "/home/you/.codex-accounts/account2",
+      "expectedEmail": "second-account@example.com",
+      "enabled": true
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "provider": "claude",
+      "claudeHome": "/home/you/.claude",
+      "expectedEmail": "claude-account@example.com",
+      "enabled": true
+    }
+  ]
+}

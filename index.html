@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex Limit Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2.8 4.3 7.2v9.6L12 21.2l7.7-4.4V7.2L12 2.8Z" />
+              <path d="M12 7.2 8.1 9.5v5l3.9 2.3 3.9-2.3v-5L12 7.2Z" />
+              <path d="M19.7 7.2 16 9.4M4.3 16.8 8 14.6M12 2.8v4.4M12 16.8v4.4" />
+            </svg>
+          </div>
+          <div>
+            <p class="eyebrow">Live Codex account limits</p>
+            <h1>Limit Tracker</h1>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="secondary-button" id="refreshUsage">
+            <span class="button-icon" data-icon="refresh"></span>
+            Refresh
+          </button>
+          <button class="primary-button" id="openAddDialog">
+            <span class="button-icon" data-icon="plus"></span>
+            Add account
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="sidebar" aria-label="Accounts">
+          <button class="overview-tab" type="button">
+            <span data-icon="grid"></span>
+            Overview
+          </button>
+          <div class="sidebar-header">
+            <h2>Accounts</h2>
+            <span id="refreshState">Idle</span>
+          </div>
+          <div class="account-list" id="accountList"></div>
+          <div class="sidebar-summary" id="sidebarSummary"></div>
+          <div class="upgrade-card">
+            <div class="upgrade-icon" data-icon="bolt"></div>
+            <div>
+              <h3>Need more limits?</h3>
+              <p>Upgrade your plan for higher usage</p>
+              <a href="https://chatgpt.com/#settings" target="_blank" rel="noreferrer">Learn more <span data-icon="arrow-up-right"></span></a>
+            </div>
+          </div>
+        </aside>
+
+        <div class="main-content">
+          <section class="top-metrics" aria-label="Usage summary">
+            <div class="metric metric-account">
+              <div class="metric-icon" data-icon="users"></div>
+              <div>
+                <span>Total accounts</span>
+                <strong id="accountCount">0</strong>
+                <small>Active</small>
+              </div>
+            </div>
+            <div class="metric metric-wide">
+              <div>
+                <span>Lowest 5-hour usage</span>
+                <strong id="bestAvailability">No data</strong>
+                <small id="bestUsageDetail">Waiting for refresh</small>
+              </div>
+              <svg class="sparkline" viewBox="0 0 140 56" aria-hidden="true">
+                <path d="M4 44c18-22 25-24 40-6s22 9 31 0 20 4 30-18 17 8 31-14" />
+              </svg>
+            </div>
+            <div class="metric metric-reset">
+              <div>
+                <span>Next reset</span>
+                <strong id="nextReset">No data</strong>
+                <small id="nextResetDetail">No upcoming reset</small>
+              </div>
+              <div class="ring-clock" aria-hidden="true">
+                <svg viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r="30" />
+                  <path d="M36 19v18l10 7" />
+                </svg>
+              </div>
+            </div>
+          </section>
+
+          <section class="detail-panel" id="detailPanel" aria-live="polite"></section>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="accountDialog">
+      <form method="dialog" class="dialog-form" id="accountForm">
+        <header>
+          <h2>Add account</h2>
+          <button class="icon-button" type="button" id="closeDialog" aria-label="Close">x</button>
+        </header>
+
+        <label>
+          Name
+          <input id="accountName" required placeholder="Backup Pro, Work Plus, Personal Plus" />
+        </label>
+
+        <label>
+          CODEX_HOME
+          <input id="codexHome" required placeholder="~/.codex-accounts/account2" />
+        </label>
+
+        <label>
+          Expected email
+          <input id="expectedEmail" type="email" placeholder="account@example.com" />
+        </label>
+
+        <p class="form-hint">
+          The app will create the directory. Authenticate it from a terminal with the generated
+          command.
+        </p>
+
+        <footer>
+          <button class="secondary-button" type="button" id="cancelDialog">Cancel</button>
+          <button class="primary-button" value="default">Save account</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
