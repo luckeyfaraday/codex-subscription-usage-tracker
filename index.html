@@ -3,132 +3,134 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Codex Limit Tracker</title>
+    <title>Almanac — Codex Limit Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <div class="brand-block">
-          <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 2.8 4.3 7.2v9.6L12 21.2l7.7-4.4V7.2L12 2.8Z" />
-              <path d="M12 7.2 8.1 9.5v5l3.9 2.3 3.9-2.3v-5L12 7.2Z" />
-              <path d="M19.7 7.2 16 9.4M4.3 16.8 8 14.6M12 2.8v4.4M12 16.8v4.4" />
-            </svg>
-          </div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="masthead">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+          <circle cx="20" cy="20" r="18" />
+          <path d="M20 2 A18 18 0 0 1 38 20 L20 20 Z" class="brand-sector" />
+          <circle cx="20" cy="20" r="2.5" class="brand-pin" />
+        </svg>
+        <div class="brand-text">
+          <span class="brand-eyebrow">N° 01 · LOCAL TELEMETRY</span>
+          <h1>
+            <span>Almanac</span>
+            <em>of limits</em>
+          </h1>
+        </div>
+      </div>
+
+      <dl class="vitals">
+        <div>
+          <dt>Accounts</dt>
+          <dd id="vitalAccounts">—</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd id="vitalStatus">Idle</dd>
+        </div>
+        <div>
+          <dt>Local time</dt>
+          <dd id="vitalClock" class="mono">--:--:--</dd>
+        </div>
+      </dl>
+
+      <div class="masthead-actions">
+        <button class="btn ghost" id="refreshUsage" type="button">
+          <span class="btn-icon" data-icon="refresh"></span>
+          <span>Refresh</span>
+        </button>
+        <button class="btn solid" id="openAddDialog" type="button">
+          <span class="btn-icon" data-icon="plus"></span>
+          <span>New account</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="focus" id="focusPanel" aria-live="polite"></section>
+
+      <section class="ledger">
+        <header class="ledger-head">
           <div>
-            <p class="eyebrow">Live Codex account limits</p>
-            <h1>Limit Tracker</h1>
+            <span class="kicker">II</span>
+            <h2>Ledger of accounts</h2>
           </div>
-        </div>
-        <div class="topbar-actions">
-          <button class="secondary-button" id="refreshUsage">
-            <span class="button-icon" data-icon="refresh"></span>
-            Refresh
-          </button>
-          <button class="primary-button" id="openAddDialog">
-            <span class="button-icon" data-icon="plus"></span>
-            Add account
-          </button>
-        </div>
-      </header>
-
-      <section class="workspace">
-        <aside class="sidebar" aria-label="Accounts">
-          <button class="overview-tab" type="button">
-            <span data-icon="grid"></span>
-            Overview
-          </button>
-          <div class="sidebar-header">
-            <h2>Accounts</h2>
-            <span id="refreshState">Idle</span>
-          </div>
-          <div class="account-list" id="accountList"></div>
-          <div class="sidebar-summary" id="sidebarSummary"></div>
-          <div class="upgrade-card">
-            <div class="upgrade-icon" data-icon="bolt"></div>
-            <div>
-              <h3>Need more limits?</h3>
-              <p>Upgrade your plan for higher usage</p>
-              <a href="https://chatgpt.com/#settings" target="_blank" rel="noreferrer">Learn more <span data-icon="arrow-up-right"></span></a>
-            </div>
-          </div>
-        </aside>
-
-        <div class="main-content">
-          <section class="top-metrics" aria-label="Usage summary">
-            <div class="metric metric-account">
-              <div class="metric-icon" data-icon="users"></div>
-              <div>
-                <span>Total accounts</span>
-                <strong id="accountCount">0</strong>
-                <small>Active</small>
-              </div>
-            </div>
-            <div class="metric metric-wide">
-              <div>
-                <span>Lowest 5-hour usage</span>
-                <strong id="bestAvailability">No data</strong>
-                <small id="bestUsageDetail">Waiting for refresh</small>
-              </div>
-              <svg class="sparkline" viewBox="0 0 140 56" aria-hidden="true">
-                <path d="M4 44c18-22 25-24 40-6s22 9 31 0 20 4 30-18 17 8 31-14" />
-              </svg>
-            </div>
-            <div class="metric metric-reset">
-              <div>
-                <span>Next reset</span>
-                <strong id="nextReset">No data</strong>
-                <small id="nextResetDetail">No upcoming reset</small>
-              </div>
-              <div class="ring-clock" aria-hidden="true">
-                <svg viewBox="0 0 72 72">
-                  <circle cx="36" cy="36" r="30" />
-                  <path d="M36 19v18l10 7" />
-                </svg>
-              </div>
-            </div>
-          </section>
-
-          <section class="detail-panel" id="detailPanel" aria-live="polite"></section>
-        </div>
+          <span class="ledger-meta" id="ledgerMeta">Awaiting first read</span>
+        </header>
+        <div class="ledger-grid" id="accountList"></div>
       </section>
+
+      <footer class="colophon">
+        <span>Almanac &middot; vanilla node + a stubborn refusal of generic ui</span>
+        <span id="footerStamp" class="mono">localhost · :8080</span>
+      </footer>
     </main>
 
-    <dialog id="accountDialog">
-      <form method="dialog" class="dialog-form" id="accountForm">
-        <header>
-          <h2>Add account</h2>
-          <button class="icon-button" type="button" id="closeDialog" aria-label="Close">x</button>
+    <dialog id="accountDialog" class="modal">
+      <form method="dialog" id="accountForm" class="modal-inner">
+        <header class="modal-head">
+          <span class="kicker">New entry</span>
+          <h2>Register a subscription</h2>
+          <button class="modal-close" type="button" id="closeDialog" aria-label="Close">
+            <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
         </header>
 
-        <label>
-          Name
-          <input id="accountName" required placeholder="Backup Pro, Work Plus, Personal Plus" />
+        <div class="provider-switch" role="radiogroup" aria-label="Provider">
+          <label>
+            <input type="radio" name="provider" value="codex" checked />
+            <span>Codex · ChatGPT</span>
+          </label>
+          <label>
+            <input type="radio" name="provider" value="claude" />
+            <span>Claude Code</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Display name</span>
+          <input id="accountName" required placeholder="Backup Pro, Personal Plus…" />
         </label>
 
-        <label>
-          CODEX_HOME
-          <input id="codexHome" required placeholder="~/.codex-accounts/account2" />
+        <label class="field" id="codexHomeField">
+          <span class="field-label">CODEX_HOME</span>
+          <input id="codexHome" placeholder="~/.codex-accounts/account2" />
+          <span class="field-hint">A dedicated path per subscription. Don't reuse <code>~/.codex</code>.</span>
         </label>
 
-        <label>
-          Expected email
-          <input id="expectedEmail" type="email" placeholder="account@example.com" />
+        <label class="field" id="claudeHomeField" hidden>
+          <span class="field-label">CLAUDE config home</span>
+          <input id="claudeHome" placeholder="~/.claude" />
+          <span class="field-hint">Defaults to <code>~/.claude</code> if left blank.</span>
         </label>
 
-        <p class="form-hint">
-          The app will create the directory. Authenticate it from a terminal with the generated
-          command.
-        </p>
+        <label class="field">
+          <span class="field-label">Expected email <em>optional</em></span>
+          <input id="expectedEmail" type="email" placeholder="you@example.com" />
+          <span class="field-hint">Used to flag a directory logged into the wrong identity.</span>
+        </label>
 
-        <footer>
-          <button class="secondary-button" type="button" id="cancelDialog">Cancel</button>
-          <button class="primary-button" value="default">Save account</button>
+        <footer class="modal-foot">
+          <button class="btn ghost" type="button" id="cancelDialog">Cancel</button>
+          <button class="btn solid" value="default">Register account</button>
         </footer>
       </form>
     </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script type="module" src="src/app.js"></script>
   </body>
