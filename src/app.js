@@ -187,6 +187,7 @@ function renderFocus(accounts) {
       }
 
       ${renderAlert(account)}
+      ${renderAccountHandoff(account)}
     </div>
 
     ${renderAside(account, primary, remainingMs, status)}
@@ -436,6 +437,25 @@ function renderAlert(account) {
   `;
 }
 
+function renderAccountHandoff(account) {
+  if (account.provider !== "codex" || !account.codexHome) return "";
+
+  const launchCommand = `CODEX_HOME=${shellQuote(account.codexHome)} codex`;
+  return `
+    <div class="handoff">
+      <div class="handoff-head">
+        <h3 class="handoff-title">Use this Codex account</h3>
+        <span>No logout needed</span>
+      </div>
+      <p class="handoff-msg">Start Codex with this account-specific home instead of logging out of another subscription.</p>
+      <div class="command">
+        <code>${escapeHtml(launchCommand)}</code>
+        <button class="command-copy" type="button" data-copy="${escapeHtml(launchCommand)}">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
 /* ── LEDGER ─────────────────────────────────────────────── */
 
 function renderLedger(accounts) {
@@ -680,6 +700,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
 /* ── ACTIONS ────────────────────────────────────────────── */

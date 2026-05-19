@@ -806,6 +806,45 @@ body {
 .alert.is-warn { border-color: rgba(244, 184, 96, 0.4); }
 .alert.is-danger { border-color: rgba(239, 91, 72, 0.4); }
 
+.handoff {
+  margin-top: 18px;
+  padding: 18px 22px;
+  border: 1px solid rgba(138, 212, 176, 0.32);
+  background: rgba(7, 7, 10, 0.72);
+  display: grid;
+  gap: 12px;
+}
+
+.handoff-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.handoff-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--jade);
+  margin: 0;
+}
+
+.handoff-head span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-mute);
+}
+
+.handoff-msg {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
 .alert-head {
   display: flex;
   justify-content: space-between;

@@ -166,6 +166,14 @@ CODEX_HOME=~/.codex-accounts/account2 codex login --device-auth
 
 During each login flow, sign into the ChatGPT subscription that should match that local account directory.
 
+To use a tracked account in a terminal, launch Codex with that account's home instead of logging out of another account:
+
+```bash
+CODEX_HOME=~/.codex-accounts/account1 codex
+```
+
+The dashboard shows a copyable launch command for each Codex account so switching subscriptions does not require mutating the shared `~/.codex` login.
+
 ## Claude Code Setup
 
 Log into Claude Code normally:
