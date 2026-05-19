@@ -86,6 +86,11 @@ function normalizeCodexHome(input) {
   return path.resolve(input);
 }
 
+function isSharedCodexHome(input) {
+  const codexHome = normalizeCodexHome(input);
+  return codexHome === path.join(os.homedir(), ".codex");
+}
+
 function createAccount(input) {
   const name = String(input.name || "").trim();
   const provider = input.provider === "claude" ? "claude" : "codex";
@@ -94,6 +99,9 @@ function createAccount(input) {
   const expectedEmail = String(input.expectedEmail || "").trim();
   if (!name) throw new Error("Account name is required");
   if (provider === "codex" && !codexHome) throw new Error("CODEX_HOME path is required");
+  if (provider === "codex" && isSharedCodexHome(codexHome)) {
+    throw new Error("Do not use ~/.codex for tracked accounts. Use a dedicated path such as ~/.codex-accounts/account1 so unrelated Codex sessions cannot change this account.");
+  }
   return {
     id: randomUUID(),
     name,
@@ -116,6 +124,16 @@ async function queryCodexAccount(account) {
   }
 
   const codexHome = normalizeCodexHome(account.codexHome);
+  if (isSharedCodexHome(codexHome)) {
+    return applyManualOverride({
+      ...account,
+      provider: "codex",
+      codexHome,
+      status: "shared_home",
+      error: "This account uses ~/.codex, which changes when any unrelated Codex session logs in or out. Move it to a dedicated CODEX_HOME such as ~/.codex-accounts/account1.",
+      loginCommand: `CODEX_HOME=${shellQuote(path.join(os.homedir(), ".codex-accounts", account.id || "account1"))} codex login --device-auth`,
+    });
+  }
   if (!existsSync(codexHome)) {
     return applyManualOverride({
       ...account,

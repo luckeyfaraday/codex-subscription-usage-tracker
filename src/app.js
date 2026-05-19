@@ -439,6 +439,7 @@ function renderAlert(account) {
 
 function renderAccountHandoff(account) {
   if (account.provider !== "codex" || !account.codexHome) return "";
+  if (account.status === "shared_home" || looksLikeSharedCodexHome(account.codexHome)) return "";
 
   const launchCommand = `CODEX_HOME=${shellQuote(account.codexHome)} codex`;
   return `
@@ -552,6 +553,7 @@ function cardFootLeft(account) {
   if (account.status === "ok") return "Live";
   if (account.status === "metadata_only") return "Profile";
   if (account.status === "manual_lockout") return "Locked";
+  if (account.status === "shared_home") return "Shared home";
   if (account.status === "not_logged_in") return "Needs login";
   if (account.status === "missing_home") return "Missing home";
   if (account.status === "wrong_account") return "Wrong account";
@@ -621,6 +623,7 @@ function statusMeta(account) {
   }
   if (account.status === "manual_lockout") return { label: "Manually offline", tone: "warn" };
   if (account.status === "metadata_only") return { label: "Profile only", tone: "info" };
+  if (account.status === "shared_home") return { label: "Shared home", tone: "danger" };
   if (account.status === "wrong_account") return { label: "Wrong account", tone: "danger" };
   if (account.status === "not_logged_in") return { label: "Awaiting login", tone: "warn" };
   if (account.status === "missing_home") return { label: "Home missing", tone: "warn" };
@@ -704,6 +707,11 @@ function escapeHtml(value) {
 
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function looksLikeSharedCodexHome(value) {
+  const path = String(value || "").replace(/\/+$/, "");
+  return path === "~/.codex" || path.endsWith("/.codex");
 }
 
 /* ── ACTIONS ────────────────────────────────────────────── */
@@ -796,6 +804,10 @@ els.form.querySelectorAll('input[name="provider"]').forEach((node) => {
 els.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const provider = els.form.querySelector('input[name="provider"]:checked').value;
+  if (provider === "codex" && looksLikeSharedCodexHome(els.codexHome.value)) {
+    toast("Use a dedicated CODEX_HOME such as ~/.codex-accounts/account1, not ~/.codex.", "error");
+    return;
+  }
   try {
     await api("/api/accounts", {
       method: "POST",

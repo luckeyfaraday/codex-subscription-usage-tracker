@@ -148,6 +148,8 @@ The server binds to `127.0.0.1` and serves the static dashboard plus local API r
 
 Each Codex subscription needs a dedicated `CODEX_HOME`. Do not reuse `~/.codex` for multi-account tracking because that path follows the currently active Codex login.
 
+The tracker rejects `~/.codex` for Codex accounts. That directory is global Codex CLI state, so logging out or switching accounts in any unrelated Codex terminal can mutate it and break the account shown in the dashboard.
+
 Create and log into the first account:
 
 ```bash
