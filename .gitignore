@@ -1,5 +1,11 @@
 node_modules/
 data/accounts.json
 .context-workspace/
+.claude/
+.codex/
+.codex-accounts/
+.agents/
 tracker-screenshot.png
+snap-*.mjs
+*.png
 *.log

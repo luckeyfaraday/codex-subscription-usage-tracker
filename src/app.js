@@ -3,18 +3,16 @@ const state = {
   usage: [],
   selectedId: null,
   loading: false,
+  lastRefresh: null,
 };
 
 const els = {
-  accountCount: document.querySelector("#accountCount"),
-  bestAvailability: document.querySelector("#bestAvailability"),
-  bestUsageDetail: document.querySelector("#bestUsageDetail"),
-  nextReset: document.querySelector("#nextReset"),
-  nextResetDetail: document.querySelector("#nextResetDetail"),
-  refreshState: document.querySelector("#refreshState"),
+  vitalAccounts: document.querySelector("#vitalAccounts"),
+  vitalStatus: document.querySelector("#vitalStatus"),
+  vitalClock: document.querySelector("#vitalClock"),
+  ledgerMeta: document.querySelector("#ledgerMeta"),
+  focusPanel: document.querySelector("#focusPanel"),
   accountList: document.querySelector("#accountList"),
-  sidebarSummary: document.querySelector("#sidebarSummary"),
-  detailPanel: document.querySelector("#detailPanel"),
   refreshUsage: document.querySelector("#refreshUsage"),
   openAddDialog: document.querySelector("#openAddDialog"),
   dialog: document.querySelector("#accountDialog"),
@@ -23,29 +21,23 @@ const els = {
   cancelDialog: document.querySelector("#cancelDialog"),
   accountName: document.querySelector("#accountName"),
   codexHome: document.querySelector("#codexHome"),
+  codexHomeField: document.querySelector("#codexHomeField"),
+  claudeHome: document.querySelector("#claudeHome"),
+  claudeHomeField: document.querySelector("#claudeHomeField"),
   expectedEmail: document.querySelector("#expectedEmail"),
+  toast: document.querySelector("#toast"),
 };
 
 const icons = {
-  "arrow-up-right": '<svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>',
-  bolt: '<svg viewBox="0 0 24 24"><path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z"/></svg>',
-  calendar: '<svg viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/></svg>',
-  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  code: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9 9-3 3 3 3"/><path d="m15 9 3 3-3 3"/></svg>',
-  copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><rect x="4" y="4" width="11" height="11" rx="2"/></svg>',
-  flask: '<svg viewBox="0 0 24 24"><path d="M10 2v6L4 19a2 2 0 0 0 1.8 3h12.4A2 2 0 0 0 20 19L14 8V2"/><path d="M8 2h8"/><path d="M7 16h10"/></svg>',
-  grid: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>',
-  info: '<svg viewBox="0 0 24 24"><path d="M12 16v-4"/><path d="M12 8h.01"/><circle cx="12" cy="12" r="10"/></svg>',
-  more: '<svg viewBox="0 0 24 24"><path d="M12 5h.01"/><path d="M12 12h.01"/><path d="M12 19h.01"/></svg>',
-  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>',
-  refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg>',
-  trash: '<svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
-  users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>',
+  refresh:
+    '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
 
-function hydrateStaticIcons() {
+function hydrateIcons() {
   document.querySelectorAll("[data-icon]").forEach((node) => {
-    const name = node.getAttribute("data-icon");
+    const name = node.dataset.icon;
     if (icons[name]) node.innerHTML = icons[name];
   });
 }
@@ -69,10 +61,12 @@ async function loadAccounts() {
 
 async function refreshUsage() {
   state.loading = true;
+  els.refreshUsage.classList.add("is-loading");
   render();
   try {
     const { usage } = await api("/api/usage");
     state.usage = usage;
+    state.lastRefresh = new Date();
     if (!state.selectedId && usage.length) state.selectedId = usage[0].id;
   } catch (error) {
     state.usage = state.accounts.map((account) => ({
@@ -80,18 +74,19 @@ async function refreshUsage() {
       status: "error",
       error: error.message,
     }));
+    toast(error.message, "error");
   } finally {
     state.loading = false;
+    els.refreshUsage.classList.remove("is-loading");
     render();
   }
 }
 
 function render() {
   const merged = getMergedAccounts();
-  renderSummary(merged);
-  renderList(merged);
-  renderDetail(merged);
-  els.refreshState.textContent = state.loading ? "Refreshing..." : "Idle";
+  renderVitals(merged);
+  renderFocus(merged);
+  renderLedger(merged);
 }
 
 function getMergedAccounts() {
@@ -101,252 +96,465 @@ function getMergedAccounts() {
   });
 }
 
-function renderSummary(accounts) {
-  const okAccounts = accounts.filter((account) => account.status === "ok");
-  const best = okAccounts
-    .map((account) => ({ account, used: getWindow(account, "primary").usedPercent }))
-    .sort((a, b) => a.used - b.used)[0];
-  const next = okAccounts
-    .flatMap((account) =>
-      ["primary", "secondary"].map((key) => ({
-        account,
-        key,
-        resetsAt: getWindow(account, key).resetsAt,
-      })),
-    )
-    .filter((item) => item.resetsAt)
-    .sort((a, b) => a.resetsAt - b.resetsAt)[0];
+/* ── VITALS ─────────────────────────────────────────────── */
 
-  els.accountCount.textContent = String(accounts.length);
-  els.bestAvailability.textContent = best ? best.account.name : "No data";
-  els.bestUsageDetail.textContent = best ? `${best.used}% used` : "Waiting for refresh";
-  els.nextReset.textContent = next ? next.account.name : "No data";
-  els.nextResetDetail.textContent = next
-    ? `${formatDuration(next.resetsAt * 1000 - Date.now())} remaining`
-    : "No upcoming reset";
-  renderSidebarSummary(accounts, next);
+function renderVitals(accounts) {
+  els.vitalAccounts.textContent = String(accounts.length);
+  els.vitalStatus.textContent = state.loading
+    ? "Polling…"
+    : state.lastRefresh
+      ? `Refreshed ${formatRelativeShort(state.lastRefresh)}`
+      : "Idle";
 }
 
-function renderList(accounts) {
-  els.accountList.replaceChildren();
-  if (!accounts.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "No accounts configured.";
-    els.accountList.append(empty);
-    return;
-  }
-
-  accounts
-    .slice()
-    .sort((a, b) => usageScore(a) - usageScore(b))
-    .forEach((account) => {
-      const button = document.createElement("button");
-      button.className = "account-item";
-      button.type = "button";
-      button.setAttribute("aria-selected", String(account.id === state.selectedId));
-      button.innerHTML = `
-        <div class="account-row">
-          <strong>${escapeHtml(account.name)}</strong>
-          <em class="pill-mini">${escapeHtml(account.planType || statusMeta(account).label)}</em>
-        </div>
-        <span><i class="dot ${account.status === "ok" ? "live" : ""}"></i>${escapeHtml(accountSubtitle(account))}</span>
-      `;
-      button.addEventListener("click", () => {
-        state.selectedId = account.id;
-        render();
-      });
-      els.accountList.append(button);
+function startClock() {
+  const tick = () => {
+    const now = new Date();
+    els.vitalClock.textContent = now.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
     });
+  };
+  tick();
+  setInterval(tick, 1000);
 }
 
-function renderSidebarSummary(accounts, next) {
-  const okAccounts = accounts.filter((account) => account.status === "ok");
-  const average = okAccounts.length
-    ? Math.round(
-        okAccounts.reduce((sum, account) => sum + (getWindow(account, "primary").usedPercent || 0), 0) /
-          okAccounts.length,
-      )
-    : 0;
-  const totalUsed = okAccounts.length
-    ? Math.round(
-        okAccounts.reduce((sum, account) => {
-          const primary = getWindow(account, "primary").usedPercent || 0;
-          const secondary = getWindow(account, "secondary").usedPercent || 0;
-          return sum + Math.round((primary + secondary) / 2);
-        }, 0) / okAccounts.length,
-      )
-    : 0;
+/* ── FOCUS PANEL ────────────────────────────────────────── */
 
-  els.sidebarSummary.innerHTML = `
-    <h3>Usage summary</h3>
-    <p>Across ${accounts.length} accounts</p>
-    <div class="summary-content">
-      <div class="donut" style="--value: ${average}%">
-        <div class="donut-label">
-          <strong>${average}%</strong>
-          <span>Average used</span>
-        </div>
-      </div>
-      <div class="summary-rows">
-        <div><span>Total accounts</span><strong>${accounts.length}</strong></div>
-        <div><span>Total window use</span><strong>${totalUsed}%</strong></div>
-        <div><span>Next reset</span><strong>${next ? formatDuration(next.resetsAt * 1000 - Date.now()) : "-"}</strong></div>
-      </div>
-    </div>
-  `;
-}
+function renderFocus(accounts) {
+  els.focusPanel.replaceChildren();
 
-function renderDetail(accounts) {
-  const account = accounts.find((item) => item.id === state.selectedId) || accounts[0];
-  els.detailPanel.replaceChildren();
-
-  if (!account) {
-    els.detailPanel.innerHTML = `
-      <div class="empty-state">
-        <h2>No account selected</h2>
-        <p>Add an account with its CODEX_HOME path, then refresh live usage.</p>
+  if (!accounts.length) {
+    els.focusPanel.innerHTML = `
+      <div class="focus-empty">
+        <h2><em>Nothing on the bench yet.</em></h2>
+        <p>Register a subscription to begin reading its rate-limit telemetry. The first entry sets the tone.</p>
       </div>
     `;
     return;
   }
 
+  const account = accounts.find((item) => item.id === state.selectedId) || accounts[0];
+  state.selectedId = account.id;
+
+  const status = statusMeta(account);
   const primary = getWindow(account, "primary");
   const secondary = getWindow(account, "secondary");
-  const status = statusMeta(account);
-  const accountPath = providerPath(account);
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = `
-    <header class="detail-header">
-      <div>
-        <h2>${escapeHtml(account.name)}</h2>
-        <div class="status-line">
-          <span class="pill ${status.tone}">${escapeHtml(status.label)}</span>
-          ${account.planType ? `<span class="pill">${escapeHtml(account.planType)}</span>` : ""}
-          ${account.email ? `<span class="pill">${escapeHtml(account.email)}</span>` : ""}
-          ${account.usageSource ? `<span class="pill">${escapeHtml(account.usageSource)}</span>` : ""}
-        </div>
-      </div>
-      <div class="row-actions">
-        <button class="secondary-button" data-action="test">${icons.flask} Test account</button>
-        <button class="secondary-button danger" data-action="delete">${icons.trash} Delete</button>
-      </div>
-    </header>
+  const path = providerPath(account);
+  const primaryPct = typeof primary.usedPercent === "number" ? primary.usedPercent : null;
+  const secondaryPct = typeof secondary.usedPercent === "number" ? secondary.usedPercent : null;
 
-    <div class="limit-grid">
-      ${renderLimitCard("5-hour window", primary)}
-      ${renderLimitCard("Weekly window", secondary)}
+  const intPart = primaryPct !== null ? Math.floor(primaryPct) : null;
+  const decPart = primaryPct !== null ? Math.round((primaryPct - intPart) * 10) : null;
+  const remainingMs = primary.resetsAt ? primary.resetsAt * 1000 - Date.now() : null;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "focus-grid";
+
+  wrapper.innerHTML = `
+    <div class="focus-main">
+      <div class="focus-status">
+        <span class="led ${ledClass(status.tone)}"></span>
+        <span>${escapeHtml(status.label)}</span>
+        <span class="sep">/</span>
+        <span>${escapeHtml(account.provider === "claude" ? "Claude Code" : "Codex · ChatGPT")}</span>
+        ${account.usageSource ? `<span class="sep">/</span><span>${escapeHtml(account.usageSource)}</span>` : ""}
+      </div>
+
+      <div class="focus-title">
+        <h2 class="focus-name">${escapeHtml(account.name)}</h2>
+      </div>
+
+      <div class="focus-tagline">
+        ${account.planType ? `<span class="tag">${escapeHtml(account.planType)}</span>` : ""}
+        ${account.email ? `<span class="focus-handle">${escapeHtml(account.email)}</span>` : ""}
+      </div>
+
+      ${renderPrimaryReadout(intPart, decPart, primary, toneFromPct(primaryPct))}
+
+      ${
+        secondary && typeof secondaryPct === "number"
+          ? `
+            <div class="secondary-row">
+              <span class="label">Weekly window</span>
+              <div class="bar"><div class="bar-fill ${toneFromPct(secondaryPct) === "danger" ? "is-danger" : ""}" style="--pct: ${clampPct(secondaryPct)}%"></div></div>
+              <div class="value">${secondaryPct.toFixed(0)}<em>% · ${formatResetShort(secondary.resetsAt)}</em></div>
+            </div>
+          `
+          : ""
+      }
+
+      ${renderAlert(account)}
     </div>
 
-    <section class="path-card">
-      <div class="path-left">
-        <div class="path-icon">${icons.code}</div>
-        <div>
-          <h3>${escapeHtml(accountPath.label)}</h3>
-          <p>${escapeHtml(accountPath.value)}</p>
-        </div>
-      </div>
-      <button class="copy-button" data-action="copy-path">${icons.copy} Copy path</button>
-    </section>
+    ${renderAside(account, primary, remainingMs, status)}
 
-    ${
-      account.status === "ok"
-        ? ""
-        : `
-          <h2>Login command</h2>
-          <div class="command-box">
-            <code>${escapeHtml(account.loginCommand || "")}</code>
-            <button class="copy-button" data-action="copy-login">Copy</button>
-          </div>
-          ${account.error ? `<p class="muted">${escapeHtml(account.error)}</p>` : ""}
-        `
-    }
-    ${
-      account.manualOverride
-        ? `
-          <h2>Availability override</h2>
-          <p class="muted">${escapeHtml(account.manualOverride.reason)} until ${formatDateTime(account.manualOverride.unavailableUntil)}.</p>
-        `
-        : ""
-    }
-    <section class="info-strip">
-      <div class="info-left">
-        <div class="info-icon">${icons.info}</div>
-        <span>Limits are updated in real-time. Usage is calculated based on your activity.</span>
+    <div class="focus-footer" style="grid-column: 1 / -1;">
+      <dl class="focus-stats">
+        <div>
+          <dt>Source</dt>
+          <dd class="strong">${escapeHtml(account.usageSource || (account.provider === "claude" ? "claude-cli" : "not refreshed"))}</dd>
+        </div>
+        <div>
+          <dt>Updated</dt>
+          <dd>${account.updatedAt ? new Date(account.updatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}</dd>
+        </div>
+        <div>
+          <dt>${escapeHtml(path.label)}</dt>
+          <dd title="${escapeHtml(path.value)}">${escapeHtml(path.value)}</dd>
+        </div>
+        <div>
+          <dt>Plan</dt>
+          <dd class="strong">${escapeHtml(account.planType || "—")}</dd>
+        </div>
+      </dl>
+      <div class="focus-actions">
+        ${
+          account.provider === "claude"
+            ? `<button class="btn ghost" data-action="sync-claude">Sync usage</button>`
+            : ""
+        }
+        <button class="btn ghost" data-action="test">Run test</button>
+        <button class="btn ghost" data-action="delete">Remove</button>
       </div>
-      <span class="updated-status">${account.updatedAt ? "Last updated just now" : "Waiting for update"}</span>
-    </section>
+    </div>
   `;
 
+  els.focusPanel.append(wrapper);
+
+  const syncClaude = wrapper.querySelector('[data-action="sync-claude"]');
+  if (syncClaude) syncClaude.addEventListener("click", () => syncClaudeUsage(account));
   wrapper.querySelector('[data-action="test"]').addEventListener("click", () => testAccount(account));
   wrapper.querySelector('[data-action="delete"]').addEventListener("click", () => deleteAccount(account));
-  const copy = wrapper.querySelector('[data-action="copy-login"]');
-  if (copy) {
-    copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(account.loginCommand || "");
-      copy.textContent = "Copied";
+  wrapper.querySelectorAll("[data-copy]").forEach((node) => {
+    node.addEventListener("click", () => {
+      navigator.clipboard.writeText(node.dataset.copy || "").catch(() => {});
+      const original = node.textContent;
+      node.textContent = "Copied";
       setTimeout(() => {
-        copy.textContent = "Copy";
+        node.textContent = original;
       }, 1200);
     });
-  }
-  const copyPath = wrapper.querySelector('[data-action="copy-path"]');
-  if (copyPath) {
-    copyPath.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(accountPath.value || "");
-      copyPath.innerHTML = `${icons.copy} Copied`;
-      setTimeout(() => {
-        copyPath.innerHTML = `${icons.copy} Copy path`;
-      }, 1200);
-    });
-  }
-  els.detailPanel.append(wrapper);
+  });
 }
 
-async function testAccount(account) {
-  const button = els.detailPanel.querySelector('[data-action="test"]');
-  button.disabled = true;
-  button.textContent = "Testing...";
-  try {
-    const result = await api(`/api/accounts/${encodeURIComponent(account.id)}/test`, {
-      method: "POST",
-    });
-    window.alert(`Account test passed.\n\n${result.stdout}`);
-  } catch (error) {
-    window.alert(`Account test failed.\n\n${error.message}`);
-  } finally {
-    button.disabled = false;
-    button.textContent = "Test account";
-    await refreshUsage();
-  }
-}
-
-function renderLimitCard(title, window) {
-  if (!window || typeof window.usedPercent !== "number") {
+function renderPrimaryReadout(intPart, decPart, primary, tone) {
+  if (intPart === null) {
     return `
-      <article class="limit-card">
-        <h3>${title}</h3>
-        <strong>No data</strong>
-        <span>Refresh after login.</span>
-      </article>
+      <div class="readout">
+        <div class="readout-label"><span>5-hour window · used</span><span>Awaiting first read</span></div>
+        <div class="readout-figure">
+          <span class="integer">—</span>
+        </div>
+        <div class="readout-bar"><div class="readout-bar-fill" style="--pct: 0%"></div></div>
+        <div class="readout-foot"><span>Refresh after login.</span><span></span></div>
+      </div>
     `;
   }
-  const remaining = Math.max(0, 100 - window.usedPercent);
+  const remaining = Math.max(0, 100 - intPart);
+  const resetCopy = primary.resetsAt
+    ? `Resets ${formatAbsoluteReset(primary.resetsAt, true)} · in ${formatDuration(primary.resetsAt * 1000 - Date.now())}`
+    : "Reset time unknown";
+  const toneClass = tone === "danger" ? "is-danger" : tone === "warn" ? "is-warn" : "";
+
   return `
-    <article class="limit-card">
-      <div class="limit-top">
-        <div class="limit-title">${title.startsWith("5") ? icons.clock : icons.calendar}${title}</div>
-        <div class="more-icon">${icons.more}</div>
+    <div class="readout">
+      <div class="readout-label">
+        <span>5-hour window · used</span>
+        <span>${primary.windowDurationMins ? `${primary.windowDurationMins / 60}h cycle` : ""}</span>
       </div>
-      <strong>${window.usedPercent}% used</strong>
-      <span>${remaining}% left · resets ${formatReset(window.resetsAt)}</span>
-      <div class="progress-shell" aria-label="${title} usage">
-        <div class="progress-bar" style="width: ${window.usedPercent}%"></div>
+      <div class="readout-figure">
+        <span class="integer">${intPart}</span>${decPart ? `<span class="decimal">.${decPart}</span>` : ""}<span class="unit">%</span>
       </div>
-      <div class="reset-strip">${icons.calendar} ${formatAbsoluteReset(window.resetsAt, title.startsWith("5"))}</div>
-    </article>
+      <div class="readout-bar"><div class="readout-bar-fill ${toneClass}" style="--pct: ${clampPct(intPart)}%"></div></div>
+      <div class="readout-foot"><span>${remaining}% available</span><span>${escapeHtml(resetCopy)}</span></div>
+    </div>
   `;
 }
+
+function renderAside(account, primary, remainingMs, status) {
+  const toneClass = status.tone === "danger" ? "is-danger" : status.tone === "warn" ? "is-warn" : "";
+
+  if (account.provider === "claude" && typeof primary.usedPercent !== "number") {
+    const expires = account.claude?.expiresAt ? new Date(account.claude.expiresAt) : null;
+    const authMethod = account.claude?.authMethod || "—";
+    const tier = account.claude?.rateLimitTier || account.planType || "—";
+    return `
+      <aside class="focus-aside ${toneClass}">
+        <div class="dial-block">
+          <div class="dial" aria-hidden="true">
+            ${renderDial(null, "INDEX")}
+            <div class="dial-center">
+              <span class="label">Auth method</span>
+              <strong class="time" style="font-size: 32px;">${escapeHtml(authMethod.slice(0, 14))}</strong>
+              <span class="foot">${escapeHtml(tier)}</span>
+            </div>
+          </div>
+          <div class="dial-caption">
+            Profile-only · sync usage to read limits
+            <strong>${expires ? `expires ${formatAbsoluteReset(expires.getTime() / 1000)}` : "no expiry recorded"}</strong>
+          </div>
+        </div>
+      </aside>
+    `;
+  }
+
+  if (remainingMs === null || remainingMs <= 0 || !primary.resetsAt) {
+    return `
+      <aside class="focus-aside ${toneClass}">
+        <div class="dial-block">
+          <div class="dial">
+            ${renderDial(0, "—")}
+            <div class="dial-center">
+              <span class="label">Next reset</span>
+              <strong class="time">—</strong>
+              <span class="foot">No data yet</span>
+            </div>
+          </div>
+          <div class="dial-caption">
+            ${account.status === "ok" ? "Window resetting" : status.label}
+            <strong>${escapeHtml(account.codexHome || "")}</strong>
+          </div>
+        </div>
+      </aside>
+    `;
+  }
+
+  const cycleMs = (primary.windowDurationMins || 300) * 60 * 1000;
+  const elapsed = Math.max(0, cycleMs - remainingMs);
+  const progressFrac = Math.min(1, elapsed / cycleMs);
+  const hours = Math.floor(remainingMs / 3_600_000);
+  const minutes = Math.floor((remainingMs % 3_600_000) / 60_000);
+  const timeText = hours > 0 ? `${hours}h ${minutes.toString().padStart(2, "0")}m` : `${minutes}m`;
+
+  return `
+    <aside class="focus-aside ${toneClass}">
+      <div class="dial-block">
+        <div class="dial">
+          ${renderDial(progressFrac, formatAbsoluteReset(primary.resetsAt, true))}
+          <div class="dial-center">
+            <span class="label">Resets in</span>
+            <strong class="time">${timeText}</strong>
+            <span class="foot">${formatAbsoluteReset(primary.resetsAt, true)}</span>
+          </div>
+        </div>
+        <div class="dial-caption">
+          Cycle elapsed
+          <strong>${Math.round(progressFrac * 100)}% &middot; ${primary.windowDurationMins ? primary.windowDurationMins / 60 + "h window" : "window"}</strong>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function renderDial(progress, _label) {
+  const size = 240;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 102;
+  const circumference = 2 * Math.PI * r;
+  const dashOffset = progress === null ? circumference : circumference * (1 - progress);
+
+  const ticks = [];
+  for (let i = 0; i < 60; i++) {
+    const angle = (i / 60) * 2 * Math.PI;
+    const isMajor = i % 5 === 0;
+    const inner = isMajor ? r + 8 : r + 10;
+    const outer = r + 14;
+    const x1 = cx + Math.cos(angle) * inner;
+    const y1 = cy + Math.sin(angle) * inner;
+    const x2 = cx + Math.cos(angle) * outer;
+    const y2 = cy + Math.sin(angle) * outer;
+    ticks.push(`<line class="${isMajor ? "major" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`);
+  }
+
+  return `
+    <svg viewBox="0 0 ${size} ${size}">
+      <g class="dial-ticks">${ticks.join("")}</g>
+      <circle class="dial-track" cx="${cx}" cy="${cy}" r="${r}" />
+      ${
+        progress !== null
+          ? `<circle class="dial-progress" cx="${cx}" cy="${cy}" r="${r}"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${dashOffset}" />`
+          : ""
+      }
+    </svg>
+  `;
+}
+
+function renderAlert(account) {
+  if (account.status === "ok") return "";
+
+  if (account.status === "manual_lockout" && account.manualOverride) {
+    return `
+      <div class="alert is-warn">
+        <div class="alert-head">
+          <h3 class="alert-title">Manual lockout</h3>
+        </div>
+        <p class="alert-msg">${escapeHtml(account.manualOverride.reason)} — clears ${formatDateTime(account.manualOverride.unavailableUntil)}.</p>
+      </div>
+    `;
+  }
+
+  if (account.status === "metadata_only") {
+    return `
+      <div class="alert">
+        <div class="alert-head">
+          <h3 class="alert-title">Profile only</h3>
+        </div>
+        <p class="alert-msg">${escapeHtml(account.sourceWarning || "Click Sync usage to run a tiny Claude Code turn and read subscription windows.")}</p>
+      </div>
+    `;
+  }
+
+  if (!account.loginCommand) {
+    return `
+      <div class="alert is-danger">
+        <div class="alert-head">
+          <h3 class="alert-title">Issue</h3>
+        </div>
+        <p class="alert-msg">${escapeHtml(account.error || "Unknown error")}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="alert ${account.status === "wrong_account" || account.status === "error" ? "is-danger" : "is-warn"}">
+      <div class="alert-head">
+        <h3 class="alert-title">Action required</h3>
+        <span style="font-family: var(--font-mono); font-size: 10px; color: var(--ink-mute); letter-spacing: 0.18em; text-transform: uppercase;">${escapeHtml(account.status.replace(/_/g, " "))}</span>
+      </div>
+      ${account.error ? `<p class="alert-msg">${escapeHtml(account.error)}</p>` : ""}
+      <div class="command">
+        <code>${escapeHtml(account.loginCommand)}</code>
+        <button class="command-copy" type="button" data-copy="${escapeHtml(account.loginCommand)}">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+/* ── LEDGER ─────────────────────────────────────────────── */
+
+function renderLedger(accounts) {
+  els.accountList.replaceChildren();
+
+  els.ledgerMeta.textContent = accounts.length
+    ? `${accounts.length} entries · sorted by lowest usage`
+    : "Empty";
+
+  const sorted = accounts.slice().sort((a, b) => usageScore(a) - usageScore(b));
+
+  sorted.forEach((account, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `account-card ${account.id === state.selectedId ? "is-active" : ""}`;
+    card.style.animationDelay = `${index * 60}ms`;
+    card.dataset.id = account.id;
+
+    const status = statusMeta(account);
+    const primary = getWindow(account, "primary");
+    const secondary = getWindow(account, "secondary");
+    const pct = typeof primary.usedPercent === "number" ? primary.usedPercent : null;
+    const secondaryPct = typeof secondary.usedPercent === "number" ? secondary.usedPercent : null;
+    const primaryTone = toneFromPct(pct);
+    const secondaryTone = toneFromPct(secondaryPct);
+    const worstTone = worstOf(primaryTone, secondaryTone);
+    const isLive = account.status === "ok";
+    const toneClass =
+      !isLive ? "is-muted" : primaryTone === "danger" ? "is-danger" : primaryTone === "warn" ? "is-warn" : "";
+    const secondaryToneClass =
+      !isLive ? "is-muted" : secondaryTone === "danger" ? "is-danger" : secondaryTone === "warn" ? "is-warn" : "";
+
+    if (isLive && worstTone === "danger") card.classList.add("is-alert");
+    else if (isLive && worstTone === "warn") card.classList.add("is-edge");
+
+    card.innerHTML = `
+      <div class="card-head">
+        <div class="left">
+          <span class="led ${ledClass(isLive && worstTone === "danger" ? "danger" : isLive && worstTone === "warn" ? "warn" : status.tone)}"></span>
+          <span>${escapeHtml(status.label)}</span>
+        </div>
+        <span class="tag">${escapeHtml(account.planType || (account.provider === "claude" ? "Claude" : "Codex"))}</span>
+      </div>
+      <h3 class="card-name">${escapeHtml(account.name)}</h3>
+      <p class="card-email">${escapeHtml(account.email || account.expectedEmail || "—")}</p>
+      <div class="card-meter">
+        <div class="card-meter-top">
+          <span class="card-meter-pct">${pct !== null ? Math.floor(pct) : "—"}<em>%</em></span>
+          <span class="card-meter-label">5h window</span>
+        </div>
+        <div class="card-meter-bar">
+          <div class="card-meter-fill ${toneClass}" style="--pct: ${pct !== null ? clampPct(pct) : 0}%"></div>
+        </div>
+        ${
+          secondaryPct !== null
+            ? `
+              <div class="card-meter-row">
+                <span class="label">Weekly</span>
+                <div class="bar"><div class="fill ${secondaryToneClass}" style="--pct: ${clampPct(secondaryPct)}%"></div></div>
+                <span class="pct">${Math.floor(secondaryPct)}%</span>
+              </div>
+            `
+            : ""
+        }
+      </div>
+      <footer class="card-foot">
+        <span>${escapeHtml(cardFootLeft(account))}</span>
+        <span class="reset-time">${escapeHtml(cardFootRight(account))}</span>
+      </footer>
+    `;
+
+    card.addEventListener("click", () => {
+      state.selectedId = account.id;
+      render();
+    });
+
+    els.accountList.append(card);
+  });
+
+  const adder = document.createElement("button");
+  adder.type = "button";
+  adder.className = "account-add";
+  adder.style.animationDelay = `${sorted.length * 60}ms`;
+  adder.innerHTML = `
+    <span class="add-eyebrow">N° ${String(sorted.length + 1).padStart(2, "0")}</span>
+    <h3>Register a new<br/>subscription</h3>
+    <span class="add-action">Add account ${icons.arrow}</span>
+  `;
+  adder.addEventListener("click", openAddDialog);
+  els.accountList.append(adder);
+}
+
+function cardFootLeft(account) {
+  if (account.status === "ok") return "Live";
+  if (account.status === "metadata_only") return "Profile";
+  if (account.status === "manual_lockout") return "Locked";
+  if (account.status === "not_logged_in") return "Needs login";
+  if (account.status === "missing_home") return "Missing home";
+  if (account.status === "wrong_account") return "Wrong account";
+  if (account.status === "error") return "Error";
+  return "Pending";
+}
+
+function cardFootRight(account) {
+  if (account.status === "ok") {
+    const primary = getWindow(account, "primary");
+    if (primary.resetsAt) return `resets ${formatAbsoluteReset(primary.resetsAt, true)}`;
+    return "—";
+  }
+  if (account.status === "manual_lockout" && account.manualOverride) {
+    return `until ${formatAbsoluteReset(new Date(account.manualOverride.unavailableUntil).getTime() / 1000, true)}`;
+  }
+  if (account.provider === "claude" && account.claude?.expiresAt) {
+    return `exp ${formatAbsoluteReset(new Date(account.claude.expiresAt).getTime() / 1000, true)}`;
+  }
+  return "—";
+}
+
+/* ── HELPERS ────────────────────────────────────────────── */
 
 function getWindow(account, key) {
   return account.rateLimits?.[key] || {};
@@ -354,25 +562,34 @@ function getWindow(account, key) {
 
 function usageScore(account) {
   if (account.status === "manual_lockout") return Number.POSITIVE_INFINITY;
+  if (account.status !== "ok" && account.status !== "metadata_only") return Number.POSITIVE_INFINITY;
   const primary = getWindow(account, "primary");
   if (typeof primary.usedPercent !== "number") return Number.POSITIVE_INFINITY;
   return primary.usedPercent;
 }
 
-function accountSubtitle(account) {
-  if (account.status === "ok") {
-    const primary = getWindow(account, "primary");
-    return `${account.planType || account.provider || "plan"} · ${primary.usedPercent}% used · ${availabilityLabel(account)}`;
-  }
-  if (account.status === "metadata_only") return `${account.planType || "Claude"} · usage endpoint not verified`;
-  if (account.status === "manual_lockout") {
-    return `Unavailable until ${formatDateTime(account.manualOverride.unavailableUntil)}`;
-  }
-  if (account.status === "wrong_account") return `Wrong account: ${account.email || "unknown"}`;
-  if (account.status === "not_logged_in") return "Not logged in";
-  if (account.status === "missing_home") return "Home missing";
-  if (account.status === "error") return "Query failed";
-  return "Not refreshed yet";
+function clampPct(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function toneFromPct(pct) {
+  if (pct === null || pct === undefined) return "ok";
+  if (pct >= 85) return "danger";
+  if (pct >= 60) return "warn";
+  return "ok";
+}
+
+function worstOf(a, b) {
+  const rank = { ok: 0, warn: 1, danger: 2 };
+  return (rank[a] ?? 0) >= (rank[b] ?? 0) ? a : b;
+}
+
+function ledClass(tone) {
+  if (tone === "ok") return "is-ok";
+  if (tone === "warn") return "is-warn";
+  if (tone === "danger") return "is-danger";
+  if (tone === "info") return "is-info";
+  return "";
 }
 
 function statusMeta(account) {
@@ -382,59 +599,42 @@ function statusMeta(account) {
     }
     return { label: "Live", tone: "ok" };
   }
-  if (account.status === "manual_lockout") return { label: "Manually unavailable", tone: "danger" };
-  if (account.status === "metadata_only") return { label: "Profile only", tone: "warn" };
+  if (account.status === "manual_lockout") return { label: "Manually offline", tone: "warn" };
+  if (account.status === "metadata_only") return { label: "Profile only", tone: "info" };
   if (account.status === "wrong_account") return { label: "Wrong account", tone: "danger" };
-  if (account.status === "not_logged_in") return { label: "Needs login", tone: "warn" };
-  if (account.status === "missing_home") return { label: "Missing home", tone: "warn" };
+  if (account.status === "not_logged_in") return { label: "Awaiting login", tone: "warn" };
+  if (account.status === "missing_home") return { label: "Home missing", tone: "warn" };
   if (account.status === "error") return { label: "Error", tone: "danger" };
-  return { label: "Pending refresh", tone: "" };
+  return { label: "Pending", tone: "" };
 }
 
 function providerPath(account) {
   if (account.provider === "claude") {
-    return {
-      label: "CLAUDE_HOME",
-      value: account.claudeHome || "~/.claude",
-    };
+    return { label: "Claude home", value: account.claudeHome || "~/.claude" };
   }
-  return {
-    label: "CODEX_HOME",
-    value: account.codexHome || "",
-  };
-}
-
-function availabilityLabel(account) {
-  if (account.rateLimits?.limitReached === true || account.rateLimits?.allowed === false) {
-    return "blocked by API";
-  }
-  const primary = getWindow(account, "primary");
-  return `resets ${formatReset(primary.resetsAt)}`;
-}
-
-function formatReset(seconds) {
-  if (!seconds) return "unknown";
-  return formatDuration(seconds * 1000 - Date.now());
+  return { label: "Codex home", value: account.codexHome || "" };
 }
 
 function formatAbsoluteReset(seconds, includeTimeOnly = false) {
-  if (!seconds) return "Reset time unknown";
+  if (!seconds) return "—";
   const date = new Date(seconds * 1000);
   const time = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-  if (includeTimeOnly) return `Resets at ${time}`;
+  if (includeTimeOnly && Math.abs(date.getTime() - Date.now()) < 24 * 60 * 60 * 1000) {
+    return time;
+  }
   const day = new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
   }).format(date);
-  return `Resets on ${day} at ${time}`;
+  return `${day} ${time}`;
 }
 
 function formatDateTime(value) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "unknown";
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
@@ -454,40 +654,26 @@ function formatDuration(ms) {
   return `${mins}m`;
 }
 
-async function deleteAccount(account) {
-  if (!window.confirm(`Remove ${account.name} from the tracker?`)) return;
-  await api(`/api/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
-  state.selectedId = null;
-  state.usage = [];
-  await loadAccounts();
-  await refreshUsage();
+function formatResetShort(seconds) {
+  if (!seconds) return "—";
+  const remaining = seconds * 1000 - Date.now();
+  if (remaining <= 0) return "now";
+  return `resets in ${formatDuration(remaining)}`;
 }
 
-els.refreshUsage.addEventListener("click", refreshUsage);
-els.openAddDialog.addEventListener("click", () => {
-  els.accountName.value = "";
-  els.codexHome.value = "~/.codex-accounts/account2";
-  els.expectedEmail.value = "";
-  els.dialog.showModal();
-});
-els.closeDialog.addEventListener("click", () => els.dialog.close());
-els.cancelDialog.addEventListener("click", () => els.dialog.close());
-els.form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await api("/api/accounts", {
-    method: "POST",
-    body: JSON.stringify({
-      name: els.accountName.value,
-      codexHome: els.codexHome.value,
-      expectedEmail: els.expectedEmail.value,
-    }),
-  });
-  els.dialog.close();
-  await loadAccounts();
-  await refreshUsage();
-});
+function formatRelativeShort(date) {
+  const diffMs = Date.now() - date.getTime();
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
 
 function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -496,7 +682,119 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-hydrateStaticIcons();
+/* ── ACTIONS ────────────────────────────────────────────── */
+
+async function testAccount(account) {
+  const button = els.focusPanel.querySelector('[data-action="test"]');
+  if (!button) return;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Testing…";
+  try {
+    const result = await api(`/api/accounts/${encodeURIComponent(account.id)}/test`, { method: "POST" });
+    toast(result.stdout || "Account responded", "ok");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+    await refreshUsage();
+  }
+}
+
+async function syncClaudeUsage(account) {
+  const button = els.focusPanel.querySelector('[data-action="sync-claude"]');
+  if (!button) return;
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Syncing…";
+  try {
+    const { usage } = await api(`/api/accounts/${encodeURIComponent(account.id)}/claude/sync`, {
+      method: "POST",
+    });
+    state.usage = state.usage.filter((item) => item.id !== account.id).concat(usage);
+    state.lastRefresh = new Date();
+    toast("Claude usage synced", "ok");
+    render();
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
+}
+
+async function deleteAccount(account) {
+  if (!window.confirm(`Remove ${account.name} from the tracker?`)) return;
+  await api(`/api/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
+  state.selectedId = null;
+  state.usage = [];
+  await loadAccounts();
+  await refreshUsage();
+  toast(`${account.name} removed`, "ok");
+}
+
+function openAddDialog() {
+  els.form.reset();
+  els.codexHome.value = "~/.codex-accounts/account2";
+  els.claudeHome.value = "";
+  els.expectedEmail.value = "";
+  syncProviderFields();
+  els.dialog.showModal();
+}
+
+function syncProviderFields() {
+  const provider = els.form.querySelector('input[name="provider"]:checked').value;
+  els.codexHomeField.hidden = provider !== "codex";
+  els.claudeHomeField.hidden = provider !== "claude";
+  els.codexHome.required = provider === "codex";
+}
+
+function toast(message, tone = "") {
+  els.toast.textContent = message;
+  els.toast.className = `toast is-on ${tone === "error" ? "is-error" : tone === "ok" ? "is-ok" : ""}`;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => {
+    els.toast.className = "toast";
+  }, 3200);
+}
+
+/* ── BOOT ───────────────────────────────────────────────── */
+
+els.refreshUsage.addEventListener("click", refreshUsage);
+els.openAddDialog.addEventListener("click", openAddDialog);
+els.closeDialog.addEventListener("click", () => els.dialog.close());
+els.cancelDialog.addEventListener("click", () => els.dialog.close());
+els.form.querySelectorAll('input[name="provider"]').forEach((node) => {
+  node.addEventListener("change", syncProviderFields);
+});
+
+els.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const provider = els.form.querySelector('input[name="provider"]:checked').value;
+  try {
+    await api("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({
+        name: els.accountName.value,
+        provider,
+        codexHome: els.codexHome.value,
+        claudeHome: els.claudeHome.value,
+        expectedEmail: els.expectedEmail.value,
+      }),
+    });
+    els.dialog.close();
+    toast("Account registered", "ok");
+    await loadAccounts();
+    await refreshUsage();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+});
+
+hydrateIcons();
+startClock();
 await loadAccounts();
 await refreshUsage();
 setInterval(refreshUsage, 60_000);
+setInterval(render, 30_000); // re-render countdowns

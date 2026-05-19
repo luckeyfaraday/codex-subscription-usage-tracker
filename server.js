@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8080);
 const DATA_DIR = path.join(__dirname, "data");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
+const CLAUDE_STATUSLINE_CAPTURE = path.join(__dirname, "scripts", "claude-statusline-capture.js");
 const CHATGPT_USAGE_URL = "https://chatgpt.com/backend-api/codex/usage";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -255,25 +256,7 @@ async function queryClaudeAccount(account) {
         updatedAt: new Date().toISOString(),
       };
     }
-    return {
-      ...account,
-      provider: "claude",
-      claudeHome,
-      status: "metadata_only",
-      email,
-      planType: status.subscriptionType || credentials.subscriptionType || null,
-      claude: {
-        authMethod: status.authMethod || null,
-        apiProvider: status.apiProvider || null,
-        orgName: status.orgName || null,
-        rateLimitTier: credentials.rateLimitTier || null,
-        expiresAt: credentials.expiresAt || null,
-      },
-      usageSource: "claude-auth-status",
-      sourceWarning: "Claude Code exposes account identity locally, but no verified live usage endpoint is wired yet.",
-      loginCommand,
-      updatedAt: new Date().toISOString(),
-    };
+    return buildClaudeUsageAccount(account, claudeHome, credentials, status, account.claudeUsage || null);
   } catch (error) {
     return {
       ...account,
@@ -284,6 +267,197 @@ async function queryClaudeAccount(account) {
       loginCommand,
     };
   }
+}
+
+function buildClaudeUsageAccount(account, claudeHome, credentials, status, usage) {
+  const email = status.email || account.expectedEmail || null;
+  const base = {
+    ...account,
+    provider: "claude",
+    claudeHome,
+    email,
+    planType: status.subscriptionType || credentials.subscriptionType || null,
+    claude: {
+      authMethod: status.authMethod || null,
+      apiProvider: status.apiProvider || null,
+      orgName: status.orgName || null,
+      rateLimitTier: credentials.rateLimitTier || null,
+      expiresAt: credentials.expiresAt || null,
+      ...(usage?.model ? { model: usage.model } : {}),
+      ...(usage?.contextWindow ? { contextWindow: usage.contextWindow } : {}),
+    },
+    loginCommand: "claude auth login",
+  };
+
+  const rateLimits = usage?.rateLimits || null;
+  if (!rateLimits) {
+    return {
+      ...base,
+      status: "metadata_only",
+      usageSource: "claude-auth-status",
+      sourceWarning: "Click Sync usage to run a tiny Claude Code turn and read subscription windows from its status-line payload.",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  return {
+    ...base,
+    status: "ok",
+    rateLimits,
+    rateLimitsByLimitId: { "claude-code": rateLimits },
+    usageSource: "claude-statusline",
+    rawUsage: usage.rawUsage || null,
+    updatedAt: usage.updatedAt || new Date().toISOString(),
+  };
+}
+
+async function syncClaudeUsageAccount(account) {
+  if (account.provider !== "claude") throw new Error("Account is not a Claude Code account");
+
+  const claudeHome = normalizeCodexHome(account.claudeHome || path.join(os.homedir(), ".claude"));
+  const credentialsPath = path.join(claudeHome, ".credentials.json");
+  if (!existsSync(credentialsPath)) throw new Error(`No Claude credentials found in ${claudeHome}`);
+
+  const [credentials, status, usage] = await Promise.all([
+    readClaudeCredentials(credentialsPath),
+    readClaudeAuthStatus(),
+    runClaudeStatuslineProbe(),
+  ]);
+
+  const email = status.email || account.expectedEmail || null;
+  if (account.expectedEmail && email && account.expectedEmail !== email) {
+    throw new Error(`Expected ${account.expectedEmail}, but Claude is logged in as ${email}`);
+  }
+
+  const nextAccount = { ...account, claudeUsage: usage };
+  return buildClaudeUsageAccount(nextAccount, claudeHome, credentials, status, usage);
+}
+
+async function runClaudeStatuslineProbe() {
+  if (!existsSync(CLAUDE_STATUSLINE_CAPTURE)) {
+    throw new Error(`Claude status-line capture helper is missing: ${CLAUDE_STATUSLINE_CAPTURE}`);
+  }
+
+  const tempDir = path.join(os.tmpdir(), `codex-limit-tracker-claude-${randomUUID()}`);
+  await mkdir(tempDir, { recursive: true, mode: 0o700 });
+  const capturePath = path.join(tempDir, "statusline.json");
+  const settingsPath = path.join(tempDir, "settings.json");
+  await writeJson(settingsPath, {
+    statusLine: {
+      type: "command",
+      command: `node ${shellQuote(CLAUDE_STATUSLINE_CAPTURE)} ${shellQuote(capturePath)}`,
+    },
+  });
+
+  const command = `claude --settings ${shellQuote(settingsPath)} --model haiku --effort low`;
+  const child = spawn("script", ["-qfec", command, "/dev/null"], {
+    cwd: __dirname,
+    env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+
+  let stderr = "";
+  let settled = false;
+  let promptSent = false;
+  const deadlineMs = 90_000;
+
+  return new Promise((resolve, reject) => {
+    const deadline = setTimeout(() => {
+      finish(new Error("Timed out syncing Claude usage"));
+    }, deadlineMs);
+
+    const promptTimer = setTimeout(() => {
+      promptSent = true;
+      child.stdin.write("Reply with only: ok\r");
+    }, 1500);
+
+    const pollTimer = setInterval(async () => {
+      try {
+        if (!existsSync(capturePath)) return;
+        const raw = JSON.parse(await readFile(capturePath, "utf8"));
+        if (!raw.rate_limits?.five_hour && !raw.rate_limits?.seven_day) return;
+        finish(null, normalizeClaudeStatuslineUsage(raw));
+      } catch {
+        // Status-line command may be rewriting the file while we poll it.
+      }
+    }, 500);
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      finish(error);
+    });
+    child.on("exit", (code) => {
+      if (!settled && code !== 0 && code !== null) {
+        finish(new Error(stderr.trim() || `Claude status-line probe exited with code ${code}`));
+      }
+    });
+
+    function finish(error, value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      clearTimeout(promptTimer);
+      clearInterval(pollTimer);
+      if (!child.killed) {
+        if (promptSent) child.stdin.write("/exit\r");
+        setTimeout(() => child.kill("SIGTERM"), 1000);
+      }
+      if (error) reject(error);
+      else resolve(value);
+    }
+  });
+}
+
+function normalizeClaudeStatuslineUsage(raw) {
+  const fiveHour = raw.rate_limits?.five_hour || null;
+  const sevenDay = raw.rate_limits?.seven_day || null;
+  const rateLimits = {
+    limitId: "claude-code",
+    limitName: "Claude Code",
+    primary: fiveHour
+      ? {
+          usedPercent: fiveHour.used_percentage,
+          windowDurationMins: 300,
+          resetsAt: fiveHour.resets_at || null,
+        }
+      : null,
+    secondary: sevenDay
+      ? {
+          usedPercent: sevenDay.used_percentage,
+          windowDurationMins: 10080,
+          resetsAt: sevenDay.resets_at || null,
+        }
+      : null,
+    planType: null,
+    allowed: null,
+    limitReached: null,
+  };
+
+  return {
+    rateLimits,
+    model: raw.model || null,
+    contextWindow: raw.context_window
+      ? {
+          usedPercentage: raw.context_window.used_percentage ?? null,
+          remainingPercentage: raw.context_window.remaining_percentage ?? null,
+          contextWindowSize: raw.context_window.context_window_size ?? null,
+        }
+      : null,
+    rawUsage: {
+      rateLimits: raw.rate_limits || null,
+      cost: raw.cost
+        ? {
+            totalCostUsd: raw.cost.total_cost_usd ?? null,
+            totalDurationMs: raw.cost.total_duration_ms ?? null,
+            totalApiDurationMs: raw.cost.total_api_duration_ms ?? null,
+          }
+        : null,
+      fastMode: raw.fast_mode ?? null,
+    },
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 async function readClaudeCredentials(credentialsPath) {
@@ -596,6 +770,39 @@ async function handleApi(req, res) {
     }
     const result = account.provider === "claude" ? await testClaudeAccount() : await testCodexAccount(account);
     sendJson(res, result.ok ? 200 : 500, result);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname.endsWith("/claude/sync")) {
+    const id = decodeURIComponent(url.pathname.split("/").at(-3) || "");
+    const accounts = await readAccounts();
+    const index = accounts.findIndex((item) => item.id === id);
+    if (index === -1) {
+      sendJson(res, 404, { error: "Account not found" });
+      return;
+    }
+    if (accounts[index].provider !== "claude") {
+      sendJson(res, 400, { error: "Account is not a Claude Code account" });
+      return;
+    }
+    const usage = await syncClaudeUsageAccount(accounts[index]);
+    accounts[index] = {
+      ...accounts[index],
+      claudeUsage: usage.claudeUsage || accounts[index].claudeUsage,
+      ...(usage.rateLimits
+        ? {
+            claudeUsage: {
+              rateLimits: usage.rateLimits,
+              rawUsage: usage.rawUsage || null,
+              model: usage.claude?.model || null,
+              contextWindow: usage.claude?.contextWindow || null,
+              updatedAt: usage.updatedAt,
+            },
+          }
+        : {}),
+    };
+    await writeAccounts(accounts);
+    sendJson(res, 200, { usage });
     return;
   }
 
