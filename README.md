@@ -15,10 +15,6 @@ It is built for developers who rotate between several Codex or ChatGPT subscript
 - Runs a small account test to confirm a Codex account can actually execute a request.
 - Stores account aliases, expected emails, providers, and config paths locally in `data/accounts.json`.
 
-## Search Keywords
-
-Codex usage tracker, Codex limit tracker, ChatGPT Codex rate limit dashboard, OpenAI Codex quota monitor, multiple Codex accounts, `CODEX_HOME` manager, Codex app-server rate limits, Claude Code usage tracker, Claude Code rate limit dashboard, local AI subscription monitor.
-
 ## Why This Exists
 
 Codex and Claude Code usage limits are account-specific, time-windowed, and easy to confuse when several subscriptions are used on the same machine. The normal `~/.codex` directory follows whichever account is active, so it is not reliable for comparing multiple subscriptions.
