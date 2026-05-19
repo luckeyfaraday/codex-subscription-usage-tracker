@@ -1,8 +1,42 @@
 # Codex Limit Tracker
 
-Codex Limit Tracker is a local Node.js dashboard for monitoring Codex subscription usage, ChatGPT Codex rate limits, and Claude Code usage windows across multiple local accounts.
+[![JavaScript](https://img.shields.io/badge/JavaScript-ESM-f7df1e?logo=javascript&logoColor=111)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![GitHub last commit](https://img.shields.io/github/last-commit/luckeyfaraday/codex-subscription-usage-tracker)](https://github.com/luckeyfaraday/codex-subscription-usage-tracker/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/luckeyfaraday/codex-subscription-usage-tracker)](https://github.com/luckeyfaraday/codex-subscription-usage-tracker/issues)
+[![Local-first](https://img.shields.io/badge/privacy-local--first-2ea44f)](#data-and-privacy)
 
-It is built for developers who rotate between several Codex or ChatGPT subscriptions and need a fast way to see which account has available capacity before starting a coding session.
+Local dashboard for monitoring Codex subscription usage, ChatGPT Codex rate limits, and Claude Code usage windows across multiple local accounts.
+
+Codex Limit Tracker is built for developers who rotate between several Codex or ChatGPT subscriptions and need a fast way to see which account has available capacity before starting a coding session.
+
+## Overview
+
+| Area | Details |
+| --- | --- |
+| Runtime | Local Node.js server with a browser dashboard |
+| Providers | Codex / ChatGPT and Claude Code |
+| Storage | Local `data/accounts.json` configuration |
+| Network | Calls provider usage/auth endpoints from your machine |
+| Tokens | Reads existing local auth files at runtime; does not copy OAuth tokens into project data |
+
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Why This Exists](#why-this-exists)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Codex Account Setup](#codex-account-setup)
+- [Claude Code Setup](#claude-code-setup)
+- [Account Configuration](#account-configuration)
+- [Local API](#local-api)
+- [Data and Privacy](#data-and-privacy)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [LLM Summary](#llm-summary)
 
 ## What It Does
 
@@ -27,7 +61,7 @@ This project treats each Codex subscription as a separate local identity:
 ~/.codex-accounts/account3
 ```
 
-The dashboard then polls those homes independently and presents the result as a local ledger.
+The dashboard polls those homes independently and presents the result as a local usage ledger.
 
 ## Features
 
@@ -196,7 +230,7 @@ Codex Limit Tracker is local-first. It stores account display names, providers, 
 
 It does not copy ChatGPT or Claude OAuth tokens into the project data file. Codex tokens remain inside each configured `CODEX_HOME`, and Claude credentials remain in the configured Claude home.
 
-The server does read local auth files at runtime so it can request usage telemetry. Keep `data/accounts.json`, `~/.codex-accounts/*`, and `~/.claude` private.
+The server reads local auth files at runtime so it can request usage telemetry. Keep `data/accounts.json`, `~/.codex-accounts/*`, and `~/.claude` private.
 
 ## Project Structure
 
@@ -239,6 +273,22 @@ Claude account metadata is available, but usage windows have not been captured y
 ### Rate Limits Load but Codex Execution Fails
 
 Use `Run test`. The usage endpoint and execution path can fail independently, so a successful usage read does not guarantee that the account can run a Codex request.
+
+## Contributing
+
+This project is small and local-first. Useful contributions should keep setup simple, avoid storing secrets, and document any provider behavior that depends on local CLI state.
+
+Before opening a pull request:
+
+```bash
+node --check server.js
+node --check src/app.js
+node --check scripts/claude-statusline-capture.js
+```
+
+## License
+
+No license file is currently included. Until one is added, assume all rights are reserved by the repository owner.
 
 ## LLM Summary
 
