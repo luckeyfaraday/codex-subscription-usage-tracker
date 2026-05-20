@@ -146,7 +146,9 @@ The server binds to `127.0.0.1` and serves the static dashboard plus local API r
 
 ## Codex Account Setup
 
-Each Codex subscription needs a dedicated `CODEX_HOME`. Do not reuse `~/.codex` for multi-account tracking because that path follows the currently active Codex login.
+Each Codex subscription needs a dedicated `CODEX_HOME`. Do not track `~/.codex` directly because that path follows the currently active Codex login.
+
+If you add `~/.codex`, the tracker treats it as an import source: it copies the current login into a dedicated `~/.codex-accounts/...` home and tracks that stable path instead. That keeps unrelated Codex logout/login activity from mutating the dashboard account.
 
 Create and log into the first account:
 
@@ -165,6 +167,14 @@ CODEX_HOME=~/.codex-accounts/account2 codex login --device-auth
 ```
 
 During each login flow, sign into the ChatGPT subscription that should match that local account directory.
+
+To use a tracked account in a terminal, launch Codex with that account's home instead of logging out of another account:
+
+```bash
+CODEX_HOME=~/.codex-accounts/account1 codex
+```
+
+The dashboard shows a copyable launch command for each Codex account so switching subscriptions does not require mutating the shared `~/.codex` login.
 
 ## Claude Code Setup
 

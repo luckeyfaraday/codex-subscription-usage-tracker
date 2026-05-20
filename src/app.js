@@ -187,6 +187,7 @@ function renderFocus(accounts) {
       }
 
       ${renderAlert(account)}
+      ${renderAccountHandoff(account)}
     </div>
 
     ${renderAside(account, primary, remainingMs, status)}
@@ -436,6 +437,26 @@ function renderAlert(account) {
   `;
 }
 
+function renderAccountHandoff(account) {
+  if (account.provider !== "codex" || !account.codexHome) return "";
+  if (account.status === "shared_home" || looksLikeSharedCodexHome(account.codexHome)) return "";
+
+  const launchCommand = `CODEX_HOME=${shellQuote(account.codexHome)} codex`;
+  return `
+    <div class="handoff">
+      <div class="handoff-head">
+        <h3 class="handoff-title">Use this Codex account</h3>
+        <span>No logout needed</span>
+      </div>
+      <p class="handoff-msg">Start Codex with this account-specific home instead of logging out of another subscription.</p>
+      <div class="command">
+        <code>${escapeHtml(launchCommand)}</code>
+        <button class="command-copy" type="button" data-copy="${escapeHtml(launchCommand)}">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
 /* ── LEDGER ─────────────────────────────────────────────── */
 
 function renderLedger(accounts) {
@@ -532,6 +553,7 @@ function cardFootLeft(account) {
   if (account.status === "ok") return "Live";
   if (account.status === "metadata_only") return "Profile";
   if (account.status === "manual_lockout") return "Locked";
+  if (account.status === "shared_home") return "Shared home";
   if (account.status === "not_logged_in") return "Needs login";
   if (account.status === "missing_home") return "Missing home";
   if (account.status === "wrong_account") return "Wrong account";
@@ -601,6 +623,7 @@ function statusMeta(account) {
   }
   if (account.status === "manual_lockout") return { label: "Manually offline", tone: "warn" };
   if (account.status === "metadata_only") return { label: "Profile only", tone: "info" };
+  if (account.status === "shared_home") return { label: "Shared home", tone: "danger" };
   if (account.status === "wrong_account") return { label: "Wrong account", tone: "danger" };
   if (account.status === "not_logged_in") return { label: "Awaiting login", tone: "warn" };
   if (account.status === "missing_home") return { label: "Home missing", tone: "warn" };
@@ -680,6 +703,15 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function looksLikeSharedCodexHome(value) {
+  const path = String(value || "").replace(/\/+$/, "");
+  return path === "~/.codex" || path.endsWith("/.codex");
 }
 
 /* ── ACTIONS ────────────────────────────────────────────── */
