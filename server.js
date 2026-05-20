@@ -932,6 +932,11 @@ function testCodexAccount(account) {
 
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (url.pathname === "/favicon.ico") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const match = PUBLIC_FILES[url.pathname];
   if (!match) {
     res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
