@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codex Limit Widget</title>
+    <link rel="stylesheet" href="widget.css" />
+  </head>
+  <body>
+    <main class="widget-shell">
+      <header class="widget-head">
+        <div>
+          <span class="eyebrow">Codex limits</span>
+          <h1 id="bestName">Loading</h1>
+        </div>
+        <button id="refreshUsage" class="icon-button" type="button" aria-label="Refresh">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12a9 9 0 0 1-15.2 6.5" />
+            <path d="M3 12A9 9 0 0 1 18.2 5.5" />
+            <path d="M18 2v4h-4" />
+            <path d="M6 22v-4h4" />
+          </svg>
+        </button>
+      </header>
+
+      <section id="statusCard" class="status-card is-loading">
+        <div class="status-line">
+          <span id="statusDot" class="dot"></span>
+          <span id="statusLabel">Polling accounts</span>
+        </div>
+        <div class="usage-readout">
+          <strong id="primaryUsage">--</strong>
+          <span>5h used</span>
+        </div>
+        <div class="meter" aria-label="Primary window usage">
+          <span id="primaryMeter"></span>
+        </div>
+        <dl class="stats-grid">
+          <div>
+            <dt>Weekly</dt>
+            <dd id="weeklyUsage">--</dd>
+          </div>
+          <div>
+            <dt>Reset</dt>
+            <dd id="resetTime">--</dd>
+          </div>
+          <div>
+            <dt>Plan</dt>
+            <dd id="planType">--</dd>
+          </div>
+          <div>
+            <dt>Updated</dt>
+            <dd id="updatedAt">--</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="accounts">
+        <header>
+          <h2>Accounts</h2>
+          <span id="accountCount">0</span>
+        </header>
+        <div id="accountList" class="account-list"></div>
+      </section>
+
+      <footer class="widget-actions">
+        <button id="copyLaunch" class="text-button" type="button">Copy launch</button>
+        <a class="text-button" href="/">Dashboard</a>
+      </footer>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="src/widget.js"></script>
+  </body>
+</html>

@@ -18,8 +18,11 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const PUBLIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
+  "/widget.html": { file: "widget.html", type: "text/html; charset=utf-8" },
   "/styles.css": { file: "styles.css", type: "text/css; charset=utf-8" },
+  "/widget.css": { file: "widget.css", type: "text/css; charset=utf-8" },
   "/src/app.js": { file: "src/app.js", type: "text/javascript; charset=utf-8" },
+  "/src/widget.js": { file: "src/widget.js", type: "text/javascript; charset=utf-8" },
 };
 
 async function ensureAccountsFile() {
