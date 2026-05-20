@@ -27,6 +27,7 @@ Codex Limit Tracker is built for developers who rotate between several Codex or 
 - [Features](#features)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
+- [Desktop Widget](#desktop-widget)
 - [Codex Account Setup](#codex-account-setup)
 - [Claude Code Setup](#claude-code-setup)
 - [Account Configuration](#account-configuration)
@@ -143,6 +144,22 @@ PORT=8090 npm start
 ```
 
 The server binds to `127.0.0.1` and serves the static dashboard plus local API routes from `server.js`.
+
+## Desktop Widget
+
+The compact widget view is available at:
+
+```text
+http://127.0.0.1:8080/widget.html
+```
+
+Launch it as a standalone Chrome app window:
+
+```bash
+google-chrome --app=http://127.0.0.1:8080/widget.html --class=CodexLimitTrackerWidget
+```
+
+The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
 
 ## Codex Account Setup
 
