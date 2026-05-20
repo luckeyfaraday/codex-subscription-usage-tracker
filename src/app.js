@@ -828,5 +828,19 @@ hydrateIcons();
 startClock();
 await loadAccounts();
 await refreshUsage();
-setInterval(refreshUsage, 60_000);
-setInterval(render, 30_000); // re-render countdowns
+let refreshTimer = setInterval(refreshUsage, 60_000);
+let countdownTimer = setInterval(render, 30_000); // re-render countdowns
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    clearInterval(refreshTimer);
+    clearInterval(countdownTimer);
+    refreshTimer = null;
+    countdownTimer = null;
+  } else if (!refreshTimer) {
+    const stale = !state.lastRefresh || Date.now() - state.lastRefresh.getTime() > 30_000;
+    if (stale) refreshUsage();
+    refreshTimer = setInterval(refreshUsage, 60_000);
+    countdownTimer = setInterval(render, 30_000);
+  }
+});
