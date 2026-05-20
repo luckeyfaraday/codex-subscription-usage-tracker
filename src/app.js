@@ -804,10 +804,6 @@ els.form.querySelectorAll('input[name="provider"]').forEach((node) => {
 els.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const provider = els.form.querySelector('input[name="provider"]:checked').value;
-  if (provider === "codex" && looksLikeSharedCodexHome(els.codexHome.value)) {
-    toast("Use a dedicated CODEX_HOME such as ~/.codex-accounts/account1, not ~/.codex.", "error");
-    return;
-  }
   try {
     await api("/api/accounts", {
       method: "POST",

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -42,7 +42,11 @@ async function readAccounts() {
   await ensureAccountsFile();
   const raw = await readFile(ACCOUNTS_FILE, "utf8");
   const parsed = JSON.parse(raw);
-  return Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  if (await stabilizeSharedCodexHomes(accounts)) {
+    await writeAccounts(accounts);
+  }
+  return accounts;
 }
 
 async function writeAccounts(accounts) {
@@ -91,19 +95,53 @@ function isSharedCodexHome(input) {
   return codexHome === path.join(os.homedir(), ".codex");
 }
 
+function dedicatedCodexHomeFor(account) {
+  const slug = String(account.name || account.id || "account")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "account";
+  const suffix = String(account.id || randomUUID()).slice(0, 8);
+  return path.join(os.homedir(), ".codex-accounts", `${slug}-${suffix}`);
+}
+
+async function copySharedCodexLogin(sourceHome, targetHome) {
+  await mkdir(targetHome, { recursive: true, mode: 0o700 });
+  const sourceAuth = path.join(sourceHome, "auth.json");
+  const targetAuth = path.join(targetHome, "auth.json");
+  if (existsSync(sourceAuth) && !existsSync(targetAuth)) {
+    await copyFile(sourceAuth, targetAuth);
+  }
+}
+
+async function stabilizeSharedCodexHomes(accounts) {
+  let changed = false;
+  for (const account of accounts) {
+    if (account.provider !== "codex" || !isSharedCodexHome(account.codexHome)) continue;
+    const sourceHome = normalizeCodexHome(account.codexHome);
+    const targetHome = dedicatedCodexHomeFor(account);
+    await copySharedCodexLogin(sourceHome, targetHome);
+    account.codexHome = targetHome;
+    account.importedFromSharedCodexHome = true;
+    changed = true;
+  }
+  return changed;
+}
+
 function createAccount(input) {
   const name = String(input.name || "").trim();
   const provider = input.provider === "claude" ? "claude" : "codex";
-  const codexHome = normalizeCodexHome(input.codexHome);
+  const id = randomUUID();
+  let codexHome = normalizeCodexHome(input.codexHome);
   const claudeHome = normalizeCodexHome(input.claudeHome || path.join(os.homedir(), ".claude"));
   const expectedEmail = String(input.expectedEmail || "").trim();
   if (!name) throw new Error("Account name is required");
   if (provider === "codex" && !codexHome) throw new Error("CODEX_HOME path is required");
   if (provider === "codex" && isSharedCodexHome(codexHome)) {
-    throw new Error("Do not use ~/.codex for tracked accounts. Use a dedicated path such as ~/.codex-accounts/account1 so unrelated Codex sessions cannot change this account.");
+    codexHome = dedicatedCodexHomeFor({ id, name });
   }
   return {
-    id: randomUUID(),
+    id,
     name,
     provider,
     ...(provider === "codex" ? { codexHome } : { claudeHome }),
@@ -122,18 +160,7 @@ async function queryCodexAccount(account) {
   if (manualOnly.status === "manual_lockout") {
     return manualOnly;
   }
-
   const codexHome = normalizeCodexHome(account.codexHome);
-  if (isSharedCodexHome(codexHome)) {
-    return applyManualOverride({
-      ...account,
-      provider: "codex",
-      codexHome,
-      status: "shared_home",
-      error: "This account uses ~/.codex, which changes when any unrelated Codex session logs in or out. Move it to a dedicated CODEX_HOME such as ~/.codex-accounts/account1.",
-      loginCommand: `CODEX_HOME=${shellQuote(path.join(os.homedir(), ".codex-accounts", account.id || "account1"))} codex login --device-auth`,
-    });
-  }
   if (!existsSync(codexHome)) {
     return applyManualOverride({
       ...account,
@@ -761,10 +788,15 @@ async function handleApi(req, res) {
   if (req.method === "POST" && url.pathname === "/api/accounts") {
     const input = await readBody(req);
     const accounts = await readAccounts();
+    const sourceCodexHome = input.provider === "claude" ? "" : normalizeCodexHome(input.codexHome);
     const account = createAccount(input);
     accounts.push(account);
     if (account.provider === "codex") {
       await mkdir(account.codexHome, { recursive: true, mode: 0o700 });
+      if (isSharedCodexHome(sourceCodexHome)) {
+        await copySharedCodexLogin(sourceCodexHome, account.codexHome);
+        account.importedFromSharedCodexHome = true;
+      }
     }
     await writeAccounts(accounts);
     sendJson(res, 201, { account });
