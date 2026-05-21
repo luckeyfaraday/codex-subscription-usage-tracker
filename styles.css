@@ -281,6 +281,11 @@ body {
   cursor: not-allowed;
 }
 
+.btn[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .btn-icon {
   display: inline-flex;
   width: 14px;
