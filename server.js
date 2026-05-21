@@ -391,7 +391,7 @@ async function runClaudeStatuslineProbe() {
     throw new Error(`Claude status-line capture helper is missing: ${CLAUDE_STATUSLINE_CAPTURE}`);
   }
 
-  const tempDir = path.join(os.tmpdir(), `codex-limit-tracker-claude-${randomUUID()}`);
+  const tempDir = path.join(os.tmpdir(), `athena-usage-tracker-claude-${randomUUID()}`);
   await mkdir(tempDir, { recursive: true, mode: 0o700 });
   const capturePath = path.join(tempDir, "statusline.json");
   const settingsPath = path.join(tempDir, "settings.json");
@@ -763,8 +763,8 @@ function queryAppServer(codexHome) {
       method: "initialize",
       params: {
         clientInfo: {
-          name: "codex-limit-tracker",
-          title: "Codex Limit Tracker",
+          name: "athena-usage-tracker",
+          title: "Athena Usage Tracker",
           version: "0.2.0",
         },
         capabilities: { experimentalApi: false },
@@ -1001,5 +1001,5 @@ createServer(async (req, res) => {
     sendJson(res, 500, { error: error.message });
   }
 }).listen(PORT, "127.0.0.1", () => {
-  console.log(`Codex Limit Tracker running at http://127.0.0.1:${PORT}/`);
+  console.log(`Athena Usage Tracker running at http://127.0.0.1:${PORT}/`);
 });

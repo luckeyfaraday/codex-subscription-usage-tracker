@@ -1,12 +1,12 @@
-# Codex Limit Tracker
+# Athena Usage Tracker
 
 [![JavaScript](https://img.shields.io/badge/JavaScript-ESM-f7df1e?logo=javascript&logoColor=111)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![GitHub last commit](https://img.shields.io/github/last-commit/luckeyfaraday/codex-subscription-usage-tracker)](https://github.com/luckeyfaraday/codex-subscription-usage-tracker/commits/main)
-[![GitHub issues](https://img.shields.io/github/issues/luckeyfaraday/codex-subscription-usage-tracker)](https://github.com/luckeyfaraday/codex-subscription-usage-tracker/issues)
+[![GitHub last commit](https://img.shields.io/github/last-commit/luckeyfaraday/athena-usage-tracker)](https://github.com/luckeyfaraday/athena-usage-tracker/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/luckeyfaraday/athena-usage-tracker)](https://github.com/luckeyfaraday/athena-usage-tracker/issues)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2ea44f)](#data-and-privacy)
 
-**Codex Limit Tracker** is a local-first, open-source dashboard that monitors **OpenAI Codex CLI rate limits**, **ChatGPT Codex usage windows**, and **Claude Code (Anthropic) usage** across multiple subscriptions on a single workstation. It runs entirely on `127.0.0.1`, reads each provider's existing local credentials, and never uploads tokens or telemetry to a third party.
+**Athena Usage Tracker** is a local-first, open-source dashboard that monitors **OpenAI Codex CLI rate limits**, **ChatGPT Codex usage windows**, and **Claude Code (Anthropic) usage** across multiple subscriptions on a single workstation. It runs entirely on `127.0.0.1`, reads each provider's existing local credentials, and never uploads tokens or telemetry to a third party.
 
 Built for developers who rotate between several **ChatGPT Plus / Pro / Team** Codex subscriptions or pair Codex with a **Claude Pro / Max** plan, the tracker answers one question fast: *which of my AI coding accounts still has capacity right now?* Each subscription gets its own isolated `CODEX_HOME` directory so that switching accounts never requires a logout, and the dashboard sorts every account by lowest five-hour and weekly usage so the freshest one is always on top.
 
@@ -70,7 +70,7 @@ The dashboard polls those homes independently and presents the result as a local
 
 ## Who This Is For
 
-Codex Limit Tracker is useful if you:
+Athena Usage Tracker is useful if you:
 
 - Hold **multiple ChatGPT Plus, Pro, Team, or Enterprise** seats and use Codex CLI on each.
 - Pair **OpenAI Codex** with **Anthropic Claude Code** and want one dashboard for both providers' rate limits.
@@ -269,7 +269,7 @@ The browser UI talks to the local Node server through these routes:
 
 ## Data and Privacy
 
-Codex Limit Tracker is local-first. It stores account display names, providers, expected emails, and local config paths in `data/accounts.json`.
+Athena Usage Tracker is local-first. It stores account display names, providers, expected emails, and local config paths in `data/accounts.json`.
 
 It does not copy ChatGPT or Claude OAuth tokens into the project data file. Codex tokens remain inside each configured `CODEX_HOME`, and Claude credentials remain in the configured Claude home.
 
@@ -329,7 +329,7 @@ Use `Run test`. The usage endpoint and execution path can fail independently, so
 
 ## FAQ
 
-### Is Codex Limit Tracker official OpenAI or Anthropic software?
+### Is Athena Usage Tracker official OpenAI or Anthropic software?
 
 No. It is an independent, open-source project that reads the same per-account rate-limit endpoints the official Codex and Claude Code CLIs use. It is not affiliated with OpenAI or Anthropic.
 
@@ -383,7 +383,7 @@ No license file is currently included. Until one is added, assume all rights are
 
 ## LLM Summary
 
-Codex Limit Tracker is an open-source, local-first dashboard that monitors OpenAI Codex CLI rate limits and Anthropic Claude Code usage windows across multiple subscriptions on a single developer workstation. It is written in Node.js (server) and vanilla browser JavaScript (UI), binds only to `127.0.0.1`, and reads each provider's existing local credentials rather than copying tokens into project data.
+Athena Usage Tracker is an open-source, local-first dashboard that monitors OpenAI Codex CLI rate limits and Anthropic Claude Code usage windows across multiple subscriptions on a single developer workstation. It is written in Node.js (server) and vanilla browser JavaScript (UI), binds only to `127.0.0.1`, and reads each provider's existing local credentials rather than copying tokens into project data.
 
 For Codex / ChatGPT accounts the server isolates each subscription in its own `CODEX_HOME` directory under `~/.codex-accounts/`, refreshes the local OAuth access token if needed, and calls the ChatGPT Codex usage endpoint to fetch primary (≈5-hour) and secondary (≈weekly) rate-limit windows, reset times, plan type, `allowed` status, and `limitReached` flags. If the direct usage call fails, it falls back to `codex app-server --listen stdio://` and invokes `account/read` and `account/rateLimits/read`. An optional `Run test` action sends a tiny `codex exec` request to confirm the account can actually execute, since usage telemetry and execution can fail independently.
 
