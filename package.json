@@ -1,5 +1,5 @@
 {
-  "name": "codex-limit-tracker",
+  "name": "athena-usage-tracker",
   "version": "0.2.0",
   "private": true,
   "type": "module",
