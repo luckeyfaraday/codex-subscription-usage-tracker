@@ -210,5 +210,19 @@ els.copyLaunch.addEventListener("click", () => {
 });
 
 await refreshUsage();
-setInterval(refreshUsage, 60_000);
-setInterval(render, 1_000);
+let refreshTimer = setInterval(refreshUsage, 60_000);
+let countdownTimer = setInterval(render, 30_000);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    clearInterval(refreshTimer);
+    clearInterval(countdownTimer);
+    refreshTimer = null;
+    countdownTimer = null;
+  } else if (!refreshTimer) {
+    const stale = !state.updatedAt || Date.now() - state.updatedAt.getTime() > 30_000;
+    if (stale) refreshUsage();
+    refreshTimer = setInterval(refreshUsage, 60_000);
+    countdownTimer = setInterval(render, 30_000);
+  }
+});

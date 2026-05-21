@@ -772,6 +772,36 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\\''")}'`;
 }
 
+const USAGE_CACHE_TTL_MS = 30_000;
+const usageCache = new Map();
+
+function cachedQueryAccount(account, { fresh } = {}) {
+  const key = account.id;
+  const now = Date.now();
+  const entry = usageCache.get(key);
+  if (!fresh && entry && entry.value && now - entry.storedAt < USAGE_CACHE_TTL_MS) {
+    return entry.value;
+  }
+  if (entry?.inflight) return entry.inflight;
+  const inflight = Promise.resolve()
+    .then(() => queryAccount(account))
+    .then((value) => {
+      usageCache.set(key, { value, storedAt: Date.now() });
+      return value;
+    })
+    .catch((error) => {
+      usageCache.delete(key);
+      throw error;
+    });
+  usageCache.set(key, { ...(entry || {}), inflight });
+  return inflight;
+}
+
+function invalidateUsageCache(id) {
+  if (id) usageCache.delete(id);
+  else usageCache.clear();
+}
+
 async function handleApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -782,8 +812,9 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/usage") {
+    const fresh = url.searchParams.get("fresh") === "1";
     const accounts = (await readAccounts()).filter((account) => account.enabled !== false);
-    const usage = await Promise.all(accounts.map(queryAccount));
+    const usage = await Promise.all(accounts.map((account) => cachedQueryAccount(account, { fresh })));
     sendJson(res, 200, { usage });
     return;
   }
@@ -802,6 +833,7 @@ async function handleApi(req, res) {
       }
     }
     await writeAccounts(accounts);
+    invalidateUsageCache();
     sendJson(res, 201, { account });
     return;
   }
@@ -810,6 +842,7 @@ async function handleApi(req, res) {
     const id = decodeURIComponent(url.pathname.split("/").pop());
     const accounts = (await readAccounts()).filter((account) => account.id !== id);
     await writeAccounts(accounts);
+    invalidateUsageCache(id);
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -855,6 +888,7 @@ async function handleApi(req, res) {
         : {}),
     };
     await writeAccounts(accounts);
+    invalidateUsageCache(id);
     sendJson(res, 200, { usage });
     return;
   }
