@@ -8,6 +8,7 @@ const state = {
 const els = {
   bestName: document.querySelector("#bestName"),
   refreshUsage: document.querySelector("#refreshUsage"),
+  privacyToggle: document.querySelector("#privacyToggle"),
   focusCard: document.querySelector("#focusCard"),
   statusDot: document.querySelector("#statusDot"),
   statusLabel: document.querySelector("#statusLabel"),
@@ -26,6 +27,49 @@ const els = {
   syncClaude: document.querySelector("#syncClaude"),
   toast: document.querySelector("#toast"),
 };
+
+const PRIVACY_KEY = "athena.privacy";
+let privacyMode = false;
+
+function looksLikeEmail(value) {
+  return typeof value === "string" && value.includes("@") && !value.startsWith("/");
+}
+
+function maskEmail(value) {
+  if (typeof value !== "string" || !value) return value;
+  const at = value.indexOf("@");
+  if (at <= 0) return value;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  const lastDot = domain.lastIndexOf(".");
+  const domainBody = lastDot > 0 ? domain.slice(0, lastDot) : domain;
+  const tld = lastDot > 0 ? domain.slice(lastDot) : "";
+  const dots = (n) => "•".repeat(Math.max(n, 3));
+  return `${local[0]}${dots(local.length - 1)}@${dots(domainBody.length)}${tld}`;
+}
+
+function displayEmail(value) {
+  if (!privacyMode || !looksLikeEmail(value)) return value;
+  return maskEmail(value);
+}
+
+function applyPrivacy(on, { persist = true } = {}) {
+  privacyMode = !!on;
+  if (persist) {
+    if (privacyMode) localStorage.setItem(PRIVACY_KEY, "on");
+    else localStorage.removeItem(PRIVACY_KEY);
+  }
+  document.body.classList.toggle("privacy-on", privacyMode);
+  if (els.privacyToggle) {
+    els.privacyToggle.setAttribute("aria-pressed", String(privacyMode));
+    els.privacyToggle.setAttribute("aria-label", privacyMode ? "Reveal emails" : "Hide emails");
+    const eye = els.privacyToggle.querySelector(".icon-eye");
+    const eyeOff = els.privacyToggle.querySelector(".icon-eye-off");
+    if (eye) eye.hidden = privacyMode;
+    if (eyeOff) eyeOff.hidden = !privacyMode;
+  }
+  render();
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -109,7 +153,12 @@ function renderFocus() {
 
   setLED(els.statusDot, isLive ? worst : primaryTone);
   els.statusLabel.textContent = statusLabel(account);
-  els.statusEmail.textContent = account.email || account.expectedEmail || account.codexHome || account.claudeHome || "—";
+  els.statusEmail.textContent =
+    displayEmail(account.email) ||
+    displayEmail(account.expectedEmail) ||
+    account.codexHome ||
+    account.claudeHome ||
+    "—";
 
   els.bestName.textContent = account.name || "Account";
 
@@ -334,7 +383,16 @@ els.copyLaunch.addEventListener("click", () => {
     () => toast(command),
   );
 });
+els.privacyToggle?.addEventListener("click", () => applyPrivacy(!privacyMode));
+window.addEventListener("storage", (event) => {
+  if (event.key === PRIVACY_KEY) applyPrivacy(event.newValue === "on", { persist: false });
+});
+window.addEventListener("keydown", (event) => {
+  if (event.target.matches?.("input, textarea, select, [contenteditable]")) return;
+  if (event.key === "p" || event.key === "P") applyPrivacy(!privacyMode);
+});
 
+applyPrivacy(localStorage.getItem(PRIVACY_KEY) === "on", { persist: false });
 await refreshUsage();
 let refreshTimer = setInterval(refreshUsage, 60_000);
 let countdownTimer = setInterval(render, 30_000);

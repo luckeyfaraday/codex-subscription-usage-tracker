@@ -177,6 +177,12 @@ svg { display: block; fill: none; stroke: currentColor; }
   margin-left: 4px;
 }
 
+.head-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .icon-button {
   width: 34px;
   height: 34px;
@@ -189,6 +195,11 @@ svg { display: block; fill: none; stroke: currentColor; }
 }
 
 .icon-button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.icon-button[aria-pressed="true"] {
   color: var(--accent);
   border-color: var(--accent);
 }

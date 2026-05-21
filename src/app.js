@@ -15,6 +15,7 @@ const els = {
   accountList: document.querySelector("#accountList"),
   refreshUsage: document.querySelector("#refreshUsage"),
   openAddDialog: document.querySelector("#openAddDialog"),
+  privacyToggle: document.querySelector("#privacyToggle"),
   dialog: document.querySelector("#accountDialog"),
   form: document.querySelector("#accountForm"),
   closeDialog: document.querySelector("#closeDialog"),
@@ -28,12 +29,52 @@ const els = {
   toast: document.querySelector("#toast"),
 };
 
+const PRIVACY_KEY = "athena.privacy";
+let privacyMode = false;
+
 const icons = {
   plus: '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>',
   refresh:
     '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M21 12a9 9 0 0 1-15.2 6.5"/><path d="M3 12A9 9 0 0 1 18.2 5.5"/><path d="M18 2v4h-4"/><path d="M6 22v-4h4"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:
+    '<svg viewBox="0 0 24 24" stroke-width="1.5"><path d="M3 3l18 18"/><path d="M10.7 5.1A9.5 9.5 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.7 6.7C3.6 8.5 2 12 2 12s3.5 7 10 7c1.9 0 3.6-.4 5.1-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
 };
+
+function maskEmail(value) {
+  if (typeof value !== "string" || !value) return value;
+  const at = value.indexOf("@");
+  if (at <= 0) return value;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  const lastDot = domain.lastIndexOf(".");
+  const domainBody = lastDot > 0 ? domain.slice(0, lastDot) : domain;
+  const tld = lastDot > 0 ? domain.slice(lastDot) : "";
+  const dots = (n) => "•".repeat(Math.max(n, 3));
+  return `${local[0]}${dots(local.length - 1)}@${dots(domainBody.length)}${tld}`;
+}
+
+function displayEmail(value) {
+  return privacyMode ? maskEmail(value) : value;
+}
+
+function applyPrivacy(on, { persist = true } = {}) {
+  privacyMode = !!on;
+  if (persist) {
+    if (privacyMode) localStorage.setItem(PRIVACY_KEY, "on");
+    else localStorage.removeItem(PRIVACY_KEY);
+  }
+  document.body.classList.toggle("privacy-on", privacyMode);
+  if (els.privacyToggle) {
+    els.privacyToggle.setAttribute("aria-pressed", String(privacyMode));
+    const iconHost = els.privacyToggle.querySelector("[data-icon]");
+    if (iconHost) iconHost.innerHTML = privacyMode ? icons.eyeOff : icons.eye;
+    const label = els.privacyToggle.querySelector(".privacy-label");
+    if (label) label.textContent = privacyMode ? "Reveal" : "Privacy";
+  }
+  render();
+}
 
 function hydrateIcons() {
   document.querySelectorAll("[data-icon]").forEach((node) => {
@@ -169,7 +210,7 @@ function renderFocus(accounts) {
 
       <div class="focus-tagline">
         ${account.planType ? `<span class="tag">${escapeHtml(account.planType)}</span>` : ""}
-        ${account.email ? `<span class="focus-handle">${escapeHtml(account.email)}</span>` : ""}
+        ${account.email ? `<span class="focus-handle">${escapeHtml(displayEmail(account.email))}</span>` : ""}
       </div>
 
       ${renderPrimaryReadout(intPart, decPart, primary, toneFromPct(primaryPct))}
@@ -501,7 +542,7 @@ function renderLedger(accounts) {
         <span class="tag">${escapeHtml(account.planType || (account.provider === "claude" ? "Claude" : "Codex"))}</span>
       </div>
       <h3 class="card-name">${escapeHtml(account.name)}</h3>
-      <p class="card-email">${escapeHtml(account.email || account.expectedEmail || "—")}</p>
+      <p class="card-email">${escapeHtml(displayEmail(account.email || account.expectedEmail) || "—")}</p>
       <div class="card-meter">
         <div class="card-meter-top">
           <span class="card-meter-pct">${pct !== null ? Math.floor(pct) : "—"}<em>%</em></span>
@@ -795,6 +836,14 @@ function toast(message, tone = "") {
 
 els.refreshUsage.addEventListener("click", refreshUsage);
 els.openAddDialog.addEventListener("click", openAddDialog);
+els.privacyToggle?.addEventListener("click", () => applyPrivacy(!privacyMode));
+window.addEventListener("storage", (event) => {
+  if (event.key === PRIVACY_KEY) applyPrivacy(event.newValue === "on", { persist: false });
+});
+window.addEventListener("keydown", (event) => {
+  if (event.target.matches?.("input, textarea, select, [contenteditable]")) return;
+  if (event.key === "p" || event.key === "P") applyPrivacy(!privacyMode);
+});
 els.closeDialog.addEventListener("click", () => els.dialog.close());
 els.cancelDialog.addEventListener("click", () => els.dialog.close());
 els.form.querySelectorAll('input[name="provider"]').forEach((node) => {
@@ -825,6 +874,7 @@ els.form.addEventListener("submit", async (event) => {
 });
 
 hydrateIcons();
+applyPrivacy(localStorage.getItem(PRIVACY_KEY) === "on", { persist: false });
 startClock();
 await loadAccounts();
 await refreshUsage();
