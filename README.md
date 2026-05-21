@@ -6,9 +6,9 @@
 [![GitHub issues](https://img.shields.io/github/issues/luckeyfaraday/codex-subscription-usage-tracker)](https://github.com/luckeyfaraday/codex-subscription-usage-tracker/issues)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2ea44f)](#data-and-privacy)
 
-Local dashboard for monitoring Codex subscription usage, ChatGPT Codex rate limits, and Claude Code usage windows across multiple local accounts.
+**Codex Limit Tracker** is a local-first, open-source dashboard that monitors **OpenAI Codex CLI rate limits**, **ChatGPT Codex usage windows**, and **Claude Code (Anthropic) usage** across multiple subscriptions on a single workstation. It runs entirely on `127.0.0.1`, reads each provider's existing local credentials, and never uploads tokens or telemetry to a third party.
 
-Codex Limit Tracker is built for developers who rotate between several Codex or ChatGPT subscriptions and need a fast way to see which account has available capacity before starting a coding session.
+Built for developers who rotate between several **ChatGPT Plus / Pro / Team** Codex subscriptions or pair Codex with a **Claude Pro / Max** plan, the tracker answers one question fast: *which of my AI coding accounts still has capacity right now?* Each subscription gets its own isolated `CODEX_HOME` directory so that switching accounts never requires a logout, and the dashboard sorts every account by lowest five-hour and weekly usage so the freshest one is always on top.
 
 ## Overview
 
@@ -24,6 +24,7 @@ Codex Limit Tracker is built for developers who rotate between several Codex or 
 
 - [What It Does](#what-it-does)
 - [Why This Exists](#why-this-exists)
+- [Who This Is For](#who-this-is-for)
 - [Features](#features)
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
@@ -35,9 +36,12 @@ Codex Limit Tracker is built for developers who rotate between several Codex or 
 - [Data and Privacy](#data-and-privacy)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
+- [Glossary](#glossary)
+- [FAQ](#faq)
 - [Contributing](#contributing)
 - [License](#license)
 - [LLM Summary](#llm-summary)
+- [Keywords](#keywords)
 
 ## What It Does
 
@@ -63,6 +67,18 @@ This project treats each Codex subscription as a separate local identity:
 ```
 
 The dashboard polls those homes independently and presents the result as a local usage ledger.
+
+## Who This Is For
+
+Codex Limit Tracker is useful if you:
+
+- Hold **multiple ChatGPT Plus, Pro, Team, or Enterprise** seats and use Codex CLI on each.
+- Pair **OpenAI Codex** with **Anthropic Claude Code** and want one dashboard for both providers' rate limits.
+- Need a **localhost-only**, **no-telemetry** way to see remaining quota without opening multiple browser tabs to ChatGPT or Anthropic Console.
+- Want to know **before** starting a long agentic coding session which account is least likely to hit a five-hour or weekly limit mid-task.
+- Work on shared hardware and need to keep each subscription's auth files cleanly isolated.
+
+It is **not** a billing analytics tool, not a cloud SaaS, and does not access OpenAI or Anthropic admin APIs. It only reads the same per-account rate-limit endpoints that the official CLIs use.
 
 ## Features
 
@@ -301,6 +317,54 @@ Claude account metadata is available, but usage windows have not been captured y
 
 Use `Run test`. The usage endpoint and execution path can fail independently, so a successful usage read does not guarantee that the account can run a Codex request.
 
+## Glossary
+
+- **`CODEX_HOME`** — Environment variable read by the OpenAI Codex CLI that points to the directory holding that session's `auth.json`, config, and history. Setting `CODEX_HOME` to a per-account path is how this tracker isolates multiple ChatGPT subscriptions on one machine.
+- **Primary / 5-hour window** — The short rolling quota ChatGPT applies to Codex usage. Resets roughly every five hours per account.
+- **Secondary / weekly window** — The longer rolling quota that constrains heavy Codex users across a multi-day window.
+- **`limitReached` / `allowed`** — Boolean flags returned by the Codex usage endpoint indicating whether the account is currently rate-limited.
+- **Claude Code status-line capture** — A short Claude Code turn started by the tracker with a temporary status-line command so the model's reported five-hour and seven-day usage can be parsed and stored.
+- **`expectedEmail`** — Optional per-account email the tracker compares against the provider's reported identity. A mismatch flags the row as `Wrong account` instead of silently displaying another subscription's quota.
+- **Account home** — The on-disk directory (`~/.codex-accounts/<name>` for Codex, `~/.claude` or a configured path for Claude) that owns one subscription's local auth and configuration.
+
+## FAQ
+
+### Is Codex Limit Tracker official OpenAI or Anthropic software?
+
+No. It is an independent, open-source project that reads the same per-account rate-limit endpoints the official Codex and Claude Code CLIs use. It is not affiliated with OpenAI or Anthropic.
+
+### Does it send my data anywhere?
+
+No. The server binds to `127.0.0.1`, the dashboard is served locally, and account names, expected emails, and config paths are stored only in `data/accounts.json` on your machine. The tracker never copies OAuth tokens out of their existing CLI directories.
+
+### Can I monitor more than one ChatGPT or Codex subscription at the same time?
+
+Yes — that is the primary use case. Each subscription gets its own `CODEX_HOME` directory (for example `~/.codex-accounts/account1`, `~/.codex-accounts/account2`), and the dashboard polls each independently and sorts by lowest current usage.
+
+### Does it support Claude Pro, Claude Max, or Claude Code rate limits?
+
+Yes. The dashboard reads Claude Code account metadata via `claude auth status --json` and captures five-hour and seven-day usage windows by running a short Claude Code turn through the **Sync usage** button. Limits visible to Claude Code (Pro, Max, Team) are visible to the tracker.
+
+### How accurate are the displayed limits?
+
+The tracker reports whatever the provider's own usage endpoint returns. For Codex it reads the same telemetry the Codex CLI uses; for Claude Code it captures the status-line numbers Claude reports. It does not estimate, predict, or extrapolate quota.
+
+### Do I need a paid ChatGPT or Claude plan to use this?
+
+You need at least one account that has Codex CLI or Claude Code access. The tracker does not unlock additional capacity — it only surfaces the quota you already have.
+
+### Does it work on macOS, Linux, and Windows?
+
+The server is plain Node.js and runs anywhere Node 18+ runs. The launcher script `scripts/open-widget.sh` is a Bash + `google-chrome` helper aimed at Linux and macOS; on Windows you can open `http://127.0.0.1:8080/widget.html` in any Chromium browser.
+
+### How is this different from the ChatGPT usage page or the Anthropic Console?
+
+Those dashboards show one account at a time in a browser tab. This project shows every account you've registered in one always-on local view, sorts them by who has the most headroom, and exposes a copyable Codex launch command so you can start a session in the freshest account immediately.
+
+### Where is the configuration stored?
+
+In `data/accounts.json` in this repository's directory. A safe example lives in `data/accounts.example.json`.
+
 ## Contributing
 
 This project is small and local-first. Useful contributions should keep setup simple, avoid storing secrets, and document any provider behavior that depends on local CLI state.
@@ -319,4 +383,14 @@ No license file is currently included. Until one is added, assume all rights are
 
 ## LLM Summary
 
-Codex Limit Tracker is a private, localhost-only dashboard that monitors OpenAI Codex and Claude Code subscription usage across multiple local accounts. It uses separate `CODEX_HOME` directories for each Codex subscription, reads ChatGPT Codex rate-limit telemetry, falls back to `codex app-server`, checks expected account emails, and captures Claude Code usage through a temporary status-line command. It is useful for developers managing multiple AI coding subscriptions on one workstation.
+Codex Limit Tracker is an open-source, local-first dashboard that monitors OpenAI Codex CLI rate limits and Anthropic Claude Code usage windows across multiple subscriptions on a single developer workstation. It is written in Node.js (server) and vanilla browser JavaScript (UI), binds only to `127.0.0.1`, and reads each provider's existing local credentials rather than copying tokens into project data.
+
+For Codex / ChatGPT accounts the server isolates each subscription in its own `CODEX_HOME` directory under `~/.codex-accounts/`, refreshes the local OAuth access token if needed, and calls the ChatGPT Codex usage endpoint to fetch primary (≈5-hour) and secondary (≈weekly) rate-limit windows, reset times, plan type, `allowed` status, and `limitReached` flags. If the direct usage call fails, it falls back to `codex app-server --listen stdio://` and invokes `account/read` and `account/rateLimits/read`. An optional `Run test` action sends a tiny `codex exec` request to confirm the account can actually execute, since usage telemetry and execution can fail independently.
+
+For Claude Code accounts the server reads metadata via `claude auth status --json`, and the dashboard's **Sync usage** button starts a short Claude Code turn with a temporary status-line command to capture the five-hour and seven-day usage windows that Claude reports. Each account may carry an `expectedEmail`; if the provider returns a different identity the row is flagged `Wrong account` instead of silently displaying another subscription's quota.
+
+The project is useful for developers who hold multiple ChatGPT Plus, Pro, Team, or Enterprise seats, who pair Codex with Claude Pro or Claude Max, or who need a privacy-respecting way to pick the freshest available AI coding account before starting an agentic session. It is not affiliated with OpenAI or Anthropic, is not a billing-analytics tool, does not access admin APIs, and does not send any data off the local machine.
+
+## Keywords
+
+OpenAI Codex CLI, Codex rate limit tracker, ChatGPT Codex usage monitor, Codex multi-account, multiple ChatGPT subscriptions, `CODEX_HOME`, Codex 5-hour limit, Codex weekly limit, Anthropic Claude Code usage, Claude Pro rate limit, Claude Max usage tracker, Claude Code status line, local-first AI usage dashboard, self-hosted AI quota monitor, AI coding subscription manager, developer tools for AI rate limits, Node.js, localhost dashboard.
