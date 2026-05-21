@@ -156,10 +156,10 @@ http://127.0.0.1:8080/widget.html
 Launch it as a standalone Chrome app window:
 
 ```bash
-google-chrome --app=http://127.0.0.1:8080/widget.html --class=CodexLimitTrackerWidget
+./scripts/open-widget.sh
 ```
 
-The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
+The launcher starts the local server if needed, opens a cache-busted Chrome app window, and uses an isolated Chrome profile so stale browser state cannot keep showing an older widget. The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
 
 ## Codex Account Setup
 
