@@ -24,6 +24,11 @@ const PUBLIC_FILES = {
   "/src/app.js": { file: "src/app.js", type: "text/javascript; charset=utf-8" },
   "/src/widget.js": { file: "src/widget.js", type: "text/javascript; charset=utf-8" },
 };
+const NO_STORE_HEADERS = {
+  "cache-control": "no-store, max-age=0",
+  pragma: "no-cache",
+  expires: "0",
+};
 
 async function ensureAccountsFile() {
   await mkdir(DATA_DIR, { recursive: true });
@@ -967,19 +972,19 @@ function testCodexAccount(account) {
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === "/favicon.ico") {
-    res.writeHead(204);
+    res.writeHead(204, NO_STORE_HEADERS);
     res.end();
     return;
   }
   const match = PUBLIC_FILES[url.pathname];
   if (!match) {
-    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8", ...NO_STORE_HEADERS });
     res.end("Not found");
     return;
   }
   const file = path.join(__dirname, match.file);
   const content = await readFile(file);
-  res.writeHead(200, { "content-type": match.type });
+  res.writeHead(200, { "content-type": match.type, ...NO_STORE_HEADERS });
   res.end(content);
 }
 

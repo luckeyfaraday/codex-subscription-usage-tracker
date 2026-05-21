@@ -3,15 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Codex Limit Widget</title>
+    <title>Almanac — Pocket</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="widget.css" />
   </head>
   <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
     <main class="widget-shell">
       <header class="widget-head">
-        <div>
-          <span class="eyebrow">Codex limits</span>
-          <h1 id="bestName">Loading</h1>
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="18" />
+            <path d="M20 2 A18 18 0 0 1 38 20 L20 20 Z" class="brand-sector" />
+            <circle cx="20" cy="20" r="2.5" class="brand-pin" />
+          </svg>
+          <div class="brand-text">
+            <span class="brand-eyebrow">N° 02 · POCKET</span>
+            <h1>
+              <span>Almanac</span>
+              <em>at hand</em>
+            </h1>
+          </div>
         </div>
         <button id="refreshUsage" class="icon-button" type="button" aria-label="Refresh">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -23,26 +42,40 @@
         </button>
       </header>
 
-      <section id="statusCard" class="status-card is-loading">
-        <div class="status-line">
-          <span id="statusDot" class="dot"></span>
+      <section id="focusCard" class="focus-card is-loading">
+        <div class="focus-status">
+          <span id="statusDot" class="led"></span>
           <span id="statusLabel">Polling accounts</span>
+          <span class="sep">·</span>
+          <span id="statusEmail" class="status-email">—</span>
         </div>
-        <div class="usage-readout">
-          <strong id="primaryUsage">--</strong>
-          <span>5h used</span>
-        </div>
-        <div class="meter" aria-label="Primary window usage">
-          <span id="primaryMeter"></span>
-        </div>
-        <dl class="stats-grid">
-          <div>
-            <dt>Weekly</dt>
-            <dd id="weeklyUsage">--</dd>
+
+        <h2 id="bestName" class="focus-name">Loading</h2>
+
+        <div class="readout">
+          <div class="readout-label">
+            <span>5h window</span>
+            <span id="readoutMeta">—</span>
           </div>
+          <div class="readout-figure">
+            <span class="integer" id="primaryUsage">--</span>
+            <span class="unit"><em>%</em></span>
+          </div>
+          <div class="readout-bar">
+            <div id="primaryMeter" class="readout-bar-fill"></div>
+          </div>
+        </div>
+
+        <div class="meter-row">
+          <span class="label">Weekly</span>
+          <div class="bar"><div id="secondaryMeter" class="fill"></div></div>
+          <span id="weeklyUsage" class="pct">--</span>
+        </div>
+
+        <dl class="focus-stats">
           <div>
             <dt>Reset</dt>
-            <dd id="resetTime">--</dd>
+            <dd id="resetTime" class="serif">--</dd>
           </div>
           <div>
             <dt>Plan</dt>
@@ -55,17 +88,36 @@
         </dl>
       </section>
 
-      <section class="accounts">
-        <header>
-          <h2>Accounts</h2>
-          <span id="accountCount">0</span>
+      <section class="ledger">
+        <header class="ledger-head">
+          <div>
+            <span class="kicker">II</span>
+            <h3>Ledger</h3>
+          </div>
+          <span id="accountCount" class="ledger-meta">0 accounts</span>
         </header>
         <div id="accountList" class="account-list"></div>
       </section>
 
       <footer class="widget-actions">
-        <button id="copyLaunch" class="text-button" type="button">Copy launch</button>
-        <a class="text-button" href="/">Dashboard</a>
+        <button id="copyLaunch" class="btn ghost" type="button">
+          <span>Copy launch</span>
+        </button>
+        <button id="syncClaude" class="btn ghost" type="button" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="arrow sync-icon">
+            <path d="M21 12a9 9 0 0 1-15.2 6.5" />
+            <path d="M3 12A9 9 0 0 1 18.2 5.5" />
+            <path d="M18 2v4h-4" />
+            <path d="M6 22v-4h4" />
+          </svg>
+          <span>Sync usage</span>
+        </button>
+        <a class="btn ghost" href="/">
+          <span>Dashboard</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="arrow">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </a>
       </footer>
     </main>
 
