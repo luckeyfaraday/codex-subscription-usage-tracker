@@ -169,13 +169,31 @@ The compact widget view is available at:
 http://127.0.0.1:8080/widget.html
 ```
 
-Launch it as a standalone Chrome app window:
+Launch it as a standalone Chrome app window on macOS or Linux:
 
 ```bash
 ./scripts/open-widget.sh
 ```
 
-The launcher starts the local server if needed, opens a cache-busted Chrome app window, and uses an isolated Chrome profile so stale browser state cannot keep showing an older widget. The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
+On Windows:
+
+```powershell
+npm run widget:win
+```
+
+The Windows launcher opens Chrome with a dedicated profile, cache-busted URL, and explicit app-window size. You can adjust the size and position before launching:
+
+```powershell
+$env:ATHENA_WIDGET_WIDTH=430
+$env:ATHENA_WIDGET_HEIGHT=760
+$env:ATHENA_WIDGET_LEFT=80
+$env:ATHENA_WIDGET_TOP=80
+npm run widget:win
+```
+
+If Chrome is installed somewhere unusual, set `ATHENA_WIDGET_CHROME` to the full `chrome.exe` path.
+
+The launchers start the local server if needed, open a cache-busted Chrome app window, and use an isolated Chrome profile so stale browser state cannot keep showing an older widget. The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
 
 ## Codex Account Setup
 
@@ -183,7 +201,7 @@ Each Codex subscription needs a dedicated `CODEX_HOME`. Do not track `~/.codex` 
 
 If you add `~/.codex`, the tracker treats it as an import source: it copies the current login into a dedicated `~/.codex-accounts/...` home and tracks that stable path instead. That keeps unrelated Codex logout/login activity from mutating the dashboard account.
 
-Create and log into the first account:
+Create and log into the first account on macOS or Linux:
 
 ```bash
 mkdir -p ~/.codex-accounts/account1
@@ -191,12 +209,40 @@ chmod 700 ~/.codex-accounts/account1
 CODEX_HOME=~/.codex-accounts/account1 codex login --device-auth
 ```
 
-Create and log into a second account:
+On Windows `cmd.exe`:
+
+```bat
+mkdir "%USERPROFILE%\.codex-accounts\account1"
+set "CODEX_HOME=%USERPROFILE%\.codex-accounts\account1" && codex login --device-auth
+```
+
+On Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex-accounts\account1"
+$env:CODEX_HOME="$env:USERPROFILE\.codex-accounts\account1"; codex login --device-auth
+```
+
+Create and log into a second account on macOS or Linux:
 
 ```bash
 mkdir -p ~/.codex-accounts/account2
 chmod 700 ~/.codex-accounts/account2
 CODEX_HOME=~/.codex-accounts/account2 codex login --device-auth
+```
+
+On Windows `cmd.exe`:
+
+```bat
+mkdir "%USERPROFILE%\.codex-accounts\account2"
+set "CODEX_HOME=%USERPROFILE%\.codex-accounts\account2" && codex login --device-auth
+```
+
+On Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex-accounts\account2"
+$env:CODEX_HOME="$env:USERPROFILE\.codex-accounts\account2"; codex login --device-auth
 ```
 
 During each login flow, sign into the ChatGPT subscription that should match that local account directory.
@@ -205,6 +251,18 @@ To use a tracked account in a terminal, launch Codex with that account's home in
 
 ```bash
 CODEX_HOME=~/.codex-accounts/account1 codex
+```
+
+On Windows `cmd.exe`:
+
+```bat
+set "CODEX_HOME=%USERPROFILE%\.codex-accounts\account1" && codex
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:CODEX_HOME="$env:USERPROFILE\.codex-accounts\account1"; codex
 ```
 
 The dashboard shows a copyable launch command for each Codex account so switching subscriptions does not require mutating the shared `~/.codex` login.
@@ -293,12 +351,26 @@ The server reads local auth files at runtime so it can request usage telemetry. 
 
 ### `CODEX_HOME does not exist`
 
-Create the account directory and log in with that exact path:
+Create the account directory and log in with that exact path on macOS or Linux:
 
 ```bash
 mkdir -p ~/.codex-accounts/account1
 chmod 700 ~/.codex-accounts/account1
 CODEX_HOME=~/.codex-accounts/account1 codex login --device-auth
+```
+
+On Windows `cmd.exe`:
+
+```bat
+mkdir "%USERPROFILE%\.codex-accounts\account1"
+set "CODEX_HOME=%USERPROFILE%\.codex-accounts\account1" && codex login --device-auth
+```
+
+On Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex-accounts\account1"
+$env:CODEX_HOME="$env:USERPROFILE\.codex-accounts\account1"; codex login --device-auth
 ```
 
 ### `No auth.json found`
