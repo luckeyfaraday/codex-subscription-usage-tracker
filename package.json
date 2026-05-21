@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "widget": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1",
+    "widget:win": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1"
   },
   "devDependencies": {
     "playwright": "^1.60.0"
