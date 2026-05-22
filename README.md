@@ -179,6 +179,8 @@ Launch it as a standalone Chrome app window on macOS or Linux:
 ./scripts/open-widget.sh
 ```
 
+On Linux X11 the launcher pins the widget always-on-top via `wmctrl` (install with `apt install wmctrl`). Set `ATHENA_WIDGET_TOPMOST=false` to disable. Wayland and macOS do not yet have built-in always-on-top support; the widget still launches normally.
+
 On Windows, open the persistent overlay widget:
 
 ```powershell
