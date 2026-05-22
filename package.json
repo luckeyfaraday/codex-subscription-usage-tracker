@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "widget": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1",
-    "widget:win": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1"
+    "widget:win": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1",
+    "widget:win:interactive": "powershell -ExecutionPolicy Bypass -File ./scripts/open-widget.ps1 -ClickThrough 0"
   },
   "devDependencies": {
     "playwright": "^1.60.0"
