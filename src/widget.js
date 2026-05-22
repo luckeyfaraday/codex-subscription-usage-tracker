@@ -145,6 +145,7 @@ function renderFocus() {
   const primaryTone = isLive ? toneFromPct(pct) : statusTone(account);
   const secondaryTone = isLive ? toneFromPct(secondaryPct) : "ok";
   const worst = worstOf(primaryTone, secondaryTone);
+  const weeklyAtLimit = isLive && secondaryPct !== null && secondaryPct >= 100 && secondary.resetsAt;
 
   card.classList.add(`is-${primaryTone}`);
   if (isLive && worst === "danger") card.classList.add("is-alert");
@@ -164,15 +165,16 @@ function renderFocus() {
 
   els.primaryUsage.textContent = pct === null ? "--" : Math.floor(pct);
   setBar(els.primaryMeter, pct, toneClass(primaryTone, isLive));
-  els.readoutMeta.textContent = primary.resetsAt
-    ? `Resets in ${formatDuration(primary.resetsAt * 1000 - Date.now())}`
+  const resetWindow = weeklyAtLimit ? secondary : primary;
+  els.readoutMeta.textContent = resetWindow.resetsAt
+    ? `${weeklyAtLimit ? "Weekly resets in" : "Resets in"} ${formatDuration(resetWindow.resetsAt * 1000 - Date.now())}`
     : windowLabel(primary);
 
   els.weeklyUsage.textContent = secondaryPct === null ? "--" : `${Math.floor(secondaryPct)}%`;
   setBar(els.secondaryMeter, secondaryPct, toneClass(secondaryTone, isLive));
 
-  els.resetTime.textContent = primary.resetsAt
-    ? formatDuration(primary.resetsAt * 1000 - Date.now())
+  els.resetTime.textContent = resetWindow.resetsAt
+    ? formatDuration(resetWindow.resetsAt * 1000 - Date.now())
     : "—";
   els.planType.textContent = account.planType || (account.provider === "claude" ? "Claude" : "Codex");
   els.updatedAt.textContent = state.updatedAt ? formatRelative(state.updatedAt) : "—";
