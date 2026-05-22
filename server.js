@@ -442,7 +442,7 @@ async function runClaudeStatuslineProbe() {
       finish(error);
     });
     child.on("exit", (code) => {
-      if (!settled && code !== 0 && code !== null) {
+      if (!settled) {
         finish(new Error(stderr.trim() || `Claude status-line probe exited with code ${code}`));
       }
     });
@@ -587,6 +587,8 @@ async function queryDirectUsage(codexHome) {
   let response = await fetchUsage(accessToken, accountId);
   if (response.status === 401 || response.status === 403) {
     accessToken = await refreshAccessToken(auth);
+    auth.tokens.access_token = accessToken;
+    await writeFile(authPath, `${JSON.stringify(auth, null, 2)}\n`);
     response = await fetchUsage(accessToken, accountId);
   }
   if (!response.ok) {
@@ -728,7 +730,13 @@ function queryAppServer(codexHome) {
       buffer = lines.pop() || "";
       for (const line of lines) {
         if (!line.trim()) continue;
-        const message = JSON.parse(line);
+        let message;
+        try {
+          message = JSON.parse(line);
+        } catch {
+          finish(new Error(`Codex app-server sent non-JSON output: ${line.slice(0, 120)}`));
+          return;
+        }
         if (message.id === 1 && message.result && !initialized) {
           initialized = true;
           send({ method: "initialized" });
@@ -753,7 +761,7 @@ function queryAppServer(codexHome) {
     });
 
     child.on("exit", (code) => {
-      if (!settled && !initialized && code !== 0) {
+      if (!settled) {
         finish(new Error(stderr.trim() || `Codex app-server exited with code ${code}`));
       }
     });
@@ -787,7 +795,7 @@ function cachedQueryAccount(account, { fresh } = {}) {
   if (!fresh && entry && entry.value && now - entry.storedAt < USAGE_CACHE_TTL_MS) {
     return entry.value;
   }
-  if (entry?.inflight) return entry.inflight;
+  if (!fresh && entry?.inflight) return entry.inflight;
   const inflight = Promise.resolve()
     .then(() => queryAccount(account))
     .then((value) => {

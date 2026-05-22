@@ -9,6 +9,11 @@ process.stdin.on("data", (chunk) => {
   input += chunk;
 });
 process.stdin.on("end", () => {
-  writeFileSync(outputPath, input);
+  try {
+    writeFileSync(outputPath, input);
+  } catch (err) {
+    process.stderr.write(`capture write failed: ${err.message}\n`);
+    process.exit(1);
+  }
   process.stdout.write("tracker\n");
 });
