@@ -113,6 +113,10 @@ The app reads local Claude metadata from:
 
 Each tracked account can include an `expectedEmail`. If a `CODEX_HOME` or Claude config directory is logged into a different identity, the UI marks it as `Wrong account` instead of silently showing misleading usage data.
 
+### Privacy Mode
+
+A privacy toggle in the dashboard masthead and in the widget header masks every account email in the UI (for example `a•••••••••@•••••.com`). The setting is persisted in `localStorage` and synced across tabs, so opening the widget after enabling privacy on the dashboard keeps emails hidden. Press `P` anywhere outside an input to toggle.
+
 ### Execution Test
 
 Rate-limit metadata proves that the tracker can read quota information. It does not prove that a model request can run.
@@ -343,17 +347,25 @@ It does not copy ChatGPT or Claude OAuth tokens into the project data file. Code
 
 The server reads local auth files at runtime so it can request usage telemetry. Keep `data/accounts.json`, `~/.codex-accounts/*`, and `~/.claude` private.
 
+For screen sharing or recording, enable **Privacy Mode** (button in the dashboard masthead and widget header, or press `P`) to mask every account email in the UI without changing what is stored on disk.
+
 ## Project Structure
 
 ```text
 .
 ├── index.html                         # Dashboard markup
 ├── styles.css                         # Dashboard styling
+├── widget.html                        # Compact widget markup
+├── widget.css                         # Widget styling
 ├── server.js                          # Local HTTP server and provider integrations
-├── src/app.js                         # Browser UI state, rendering, and actions
+├── src/app.js                         # Dashboard UI state, rendering, and actions
+├── src/widget.js                      # Widget UI state, rendering, and actions
 ├── scripts/claude-statusline-capture.js
+├── scripts/open-widget.sh             # macOS / Linux widget launcher
+├── scripts/open-widget.ps1            # Windows widget launcher
 ├── data/accounts.example.json         # Example account configuration
 ├── package.json
+├── package-lock.json
 └── README.md
 ```
 
@@ -437,7 +449,7 @@ You need at least one account that has Codex CLI or Claude Code access. The trac
 
 ### Does it work on macOS, Linux, and Windows?
 
-The server is plain Node.js and runs anywhere Node 18+ runs. The launcher script `scripts/open-widget.sh` is a Bash + `google-chrome` helper aimed at Linux and macOS; on Windows you can open `http://127.0.0.1:8080/widget.html` in any Chromium browser.
+The server is plain Node.js and runs anywhere Node 18+ runs. `scripts/open-widget.sh` launches the widget on macOS and Linux (Bash + `google-chrome`); `scripts/open-widget.ps1` (run via `npm run widget:win`) launches it on Windows with configurable size and position. You can also just open `http://127.0.0.1:8080/widget.html` in any Chromium browser.
 
 ### How is this different from the ChatGPT usage page or the Anthropic Console?
 
@@ -456,6 +468,7 @@ Before opening a pull request:
 ```bash
 node --check server.js
 node --check src/app.js
+node --check src/widget.js
 node --check scripts/claude-statusline-capture.js
 ```
 
