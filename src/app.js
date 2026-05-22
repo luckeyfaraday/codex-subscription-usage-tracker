@@ -799,12 +799,16 @@ async function syncClaudeUsage(account) {
 
 async function deleteAccount(account) {
   if (!window.confirm(`Remove ${account.name} from the tracker?`)) return;
-  await api(`/api/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
-  state.selectedId = null;
-  state.usage = [];
-  await loadAccounts();
-  await refreshUsage();
-  toast(`${account.name} removed`, "ok");
+  try {
+    await api(`/api/accounts/${encodeURIComponent(account.id)}`, { method: "DELETE" });
+    state.selectedId = null;
+    state.usage = [];
+    await loadAccounts();
+    await refreshUsage();
+    toast(`${account.name} removed`, "ok");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function openAddDialog() {
