@@ -31,9 +31,38 @@ fi
 
 mkdir -p "$PROFILE_DIR"
 
-exec google-chrome \
+TOPMOST="${ATHENA_WIDGET_TOPMOST:-true}"
+WIN_CLASS="AthenaUsageTrackerWidget"
+
+google-chrome \
   --user-data-dir="$PROFILE_DIR" \
   --app="$URL" \
-  --class=CodexLimitTrackerWidget \
+  --class="$WIN_CLASS" \
   --disable-application-cache \
-  --disk-cache-size=1
+  --disk-cache-size=1 &
+chrome_pid="$!"
+
+case "$TOPMOST" in
+  true|1|yes|on)
+    if command -v wmctrl >/dev/null 2>&1; then
+      # Chrome's --class sets WM_CLASS res_class; res_name is the lowercased
+      # form. Poll briefly because wmctrl can't see the window until the X
+      # server has mapped it.
+      pinned=0
+      for _ in $(seq 1 50); do
+        if wmctrl -lx 2>/dev/null | awk '{print $3}' | grep -qi "\\.${WIN_CLASS}\$"; then
+          wmctrl -x -r "$WIN_CLASS" -b add,above >/dev/null 2>&1 && pinned=1
+          break
+        fi
+        sleep 0.1
+      done
+      if [ "$pinned" -eq 0 ]; then
+        echo "Widget window did not appear within 5s; always-on-top was not applied." >&2
+      fi
+    else
+      echo "wmctrl not found; install it (e.g. apt install wmctrl) for always-on-top behavior." >&2
+    fi
+    ;;
+esac
+
+wait "$chrome_pid"
