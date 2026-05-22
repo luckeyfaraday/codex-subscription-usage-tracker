@@ -175,13 +175,21 @@ Launch it as a standalone Chrome app window on macOS or Linux:
 ./scripts/open-widget.sh
 ```
 
-On Windows:
+On Windows, open the persistent overlay widget:
 
 ```powershell
 npm run widget:win
 ```
 
-The Windows launcher opens Chrome with a dedicated profile, cache-busted URL, and explicit app-window size. You can adjust the size and position before launching:
+The Windows launcher opens Chrome with a dedicated profile, cache-busted URL, explicit app-window size, always-on-top behavior, and click-through overlay mode. Clicks pass through to windows behind the widget, and the widget stays visible instead of hiding when another app receives focus.
+
+Use interactive mode when you need to click the widget's buttons or links:
+
+```powershell
+npm run widget:win:interactive
+```
+
+You can adjust the size and position before launching:
 
 ```powershell
 $env:ATHENA_WIDGET_WIDTH=430
@@ -190,6 +198,8 @@ $env:ATHENA_WIDGET_LEFT=80
 $env:ATHENA_WIDGET_TOP=80
 npm run widget:win
 ```
+
+Set `ATHENA_WIDGET_CLICK_THROUGH=false` to keep the window topmost but clickable. Set `ATHENA_WIDGET_TOPMOST=false` to disable always-on-top behavior.
 
 If Chrome is installed somewhere unusual, set `ATHENA_WIDGET_CHROME` to the full `chrome.exe` path.
 
