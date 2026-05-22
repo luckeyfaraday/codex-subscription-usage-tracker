@@ -38,7 +38,7 @@ $Url = "$($BaseUrl)?v=$(Get-Date -Format yyyyMMddHHmmss)"
 $ProfileDir = if ($env:ATHENA_WIDGET_PROFILE) {
   $env:ATHENA_WIDGET_PROFILE
 } else {
-  Join-Path $env:TEMP "athena-usage-tracker-widget-profile-$PID"
+  Join-Path $env:TEMP "athena-usage-tracker-widget-profile"
 }
 $LogFile = if ($env:ATHENA_WIDGET_LOG) {
   $env:ATHENA_WIDGET_LOG
@@ -126,26 +126,28 @@ public static class WidgetWindow {
 "@
 
 function Get-WidgetWindowHandle {
-  param([datetime]$StartedAfter)
+  param([string]$ProfilePath)
 
-  $chromeProcesses = Get-Process chrome -ErrorAction SilentlyContinue |
-    Where-Object { $_.StartTime -ge $StartedAfter.AddSeconds(-2) -and $_.MainWindowHandle -ne 0 }
-
-  foreach ($process in $chromeProcesses) {
-    if ($process.MainWindowTitle -match "Almanac|Athena|Pocket") {
-      return $process.MainWindowHandle
-    }
+  # Identify the Chrome processes spawned by THIS launcher by matching the
+  # --user-data-dir argument on the process command line. This is deterministic
+  # and avoids title-matching, which would break if the widget is ever renamed
+  # or if another Chrome window with a similar title happens to be open.
+  $needle = "--user-data-dir=$ProfilePath"
+  $script:widgetPids = @{}
+  try {
+    Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -and $_.CommandLine.Contains($needle) } |
+      ForEach-Object { $script:widgetPids[[int]$_.ProcessId] = $true }
+  } catch {
+    # CIM/WMI unavailable — caller will get IntPtr.Zero and retry/warn.
+    return [IntPtr]::Zero
   }
 
-  foreach ($process in $chromeProcesses) {
-    return $process.MainWindowHandle
+  if ($script:widgetPids.Count -eq 0) {
+    return [IntPtr]::Zero
   }
 
-  $handles = New-Object System.Collections.Generic.List[System.IntPtr]
-  $processIds = @{}
-  Get-Process chrome -ErrorAction SilentlyContinue |
-    Where-Object { $_.StartTime -ge $StartedAfter.AddSeconds(-2) } |
-    ForEach-Object { $processIds[[int]$_.Id] = $true }
+  $script:foundHandle = [IntPtr]::Zero
 
   [WidgetWindow]::EnumWindows({
     param([IntPtr]$hWnd, [IntPtr]$lParam)
@@ -156,25 +158,23 @@ function Get-WidgetWindowHandle {
 
     $windowProcessId = 0
     [WidgetWindow]::GetWindowThreadProcessId($hWnd, [ref]$windowProcessId) | Out-Null
-    if (-not $processIds.ContainsKey($windowProcessId)) {
+    if (-not $script:widgetPids.ContainsKey($windowProcessId)) {
       return $true
     }
 
+    # Skip windows that haven't been given a real title yet — Chrome briefly
+    # owns a hidden message-only or placeholder window before the app window.
     $title = New-Object System.Text.StringBuilder 256
     [WidgetWindow]::GetWindowText($hWnd, $title, $title.Capacity) | Out-Null
-    if ($title.ToString() -match "Almanac|Athena|Pocket") {
-      $handles.Add($hWnd)
-      return $false
+    if ($title.Length -eq 0) {
+      return $true
     }
 
-    return $true
+    $script:foundHandle = $hWnd
+    return $false
   }, [IntPtr]::Zero) | Out-Null
 
-  if ($handles.Count -gt 0) {
-    return $handles[0]
-  }
-
-  return [IntPtr]::Zero
+  return $script:foundHandle
 }
 
 function Set-WidgetOverlayMode {
@@ -243,14 +243,18 @@ $chromeArgs = @(
   "--disk-cache-size=1"
 )
 
-$startedAt = Get-Date
 Start-Process -FilePath $Chrome -ArgumentList $chromeArgs | Out-Null
 
+$windowHandle = [IntPtr]::Zero
 for ($i = 0; $i -lt 50; $i++) {
   Start-Sleep -Milliseconds 100
-  $windowHandle = Get-WidgetWindowHandle -StartedAfter $startedAt
+  $windowHandle = Get-WidgetWindowHandle -ProfilePath $ProfileDir
   if ($windowHandle -ne [IntPtr]::Zero) {
     Set-WidgetOverlayMode -Handle $windowHandle -MakeTopMost $TopMostEnabled -MakeClickThrough $ClickThroughEnabled
     break
   }
+}
+
+if ($windowHandle -eq [IntPtr]::Zero -and ($TopMostEnabled -or $ClickThroughEnabled)) {
+  Write-Warning "Widget window did not appear within 5s; overlay styles were not applied."
 }
