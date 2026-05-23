@@ -365,7 +365,7 @@ async function syncClaudeUsage() {
     state.usage = Array.from(map.values());
     state.selected = map.get(account.id) || state.selected;
     state.updatedAt = new Date();
-    toast("Claude usage synced", "ok");
+    toast(usage.syncWarning || "Claude usage synced", usage.syncWarning ? "warn" : "ok");
     render();
   } catch (error) {
     toast(error.message || "Sync failed", "error");
