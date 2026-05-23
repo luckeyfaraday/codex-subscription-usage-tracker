@@ -1495,6 +1495,12 @@ body {
   border-color: var(--accent);
 }
 
+.toast.is-warn {
+  background: var(--amber);
+  color: #0a0a0c;
+  border-color: var(--amber);
+}
+
 /* ── ENTRANCE ANIMATIONS ─────────────────────────────────── */
 
 .focus,

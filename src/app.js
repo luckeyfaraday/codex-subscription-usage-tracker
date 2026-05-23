@@ -787,7 +787,7 @@ async function syncClaudeUsage(account) {
     });
     state.usage = state.usage.filter((item) => item.id !== account.id).concat(usage);
     state.lastRefresh = new Date();
-    toast("Claude usage synced", "ok");
+    toast(usage.syncWarning || "Claude usage synced", usage.syncWarning ? "warn" : "ok");
     render();
   } catch (error) {
     toast(error.message, "error");

@@ -30,6 +30,14 @@ const NO_STORE_HEADERS = {
   expires: "0",
 };
 
+class ClaudeSyncUnavailableError extends Error {
+  constructor(message, code = "claude_sync_unavailable") {
+    super(message);
+    this.name = "ClaudeSyncUnavailableError";
+    this.code = code;
+  }
+}
+
 async function ensureAccountsFile() {
   await mkdir(DATA_DIR, { recursive: true });
   if (existsSync(ACCOUNTS_FILE)) return;
@@ -371,15 +379,33 @@ async function syncClaudeUsageAccount(account) {
   const credentialsPath = path.join(claudeHome, ".credentials.json");
   if (!existsSync(credentialsPath)) throw new Error(`No Claude credentials found in ${claudeHome}`);
 
-  const [credentials, status, usage] = await Promise.all([
+  const [credentials, status] = await Promise.all([
     readClaudeCredentials(credentialsPath),
     readClaudeAuthStatus(),
-    runClaudeStatuslineProbe(),
   ]);
 
   const email = status.email || account.expectedEmail || null;
   if (account.expectedEmail && email && account.expectedEmail !== email) {
     throw new Error(`Expected ${account.expectedEmail}, but Claude is logged in as ${email}`);
+  }
+
+  let usage;
+  try {
+    usage = await runClaudeStatuslineProbe();
+  } catch (error) {
+    if (!(error instanceof ClaudeSyncUnavailableError)) throw error;
+    const fallback = account.claudeUsage || null;
+    return {
+      ...buildClaudeUsageAccount(account, claudeHome, credentials, status, fallback),
+      sourceWarning: fallback
+        ? `${error.message} Showing last synced Claude usage.`
+        : error.message,
+      syncWarning: fallback
+        ? `${error.message} Showing last synced Claude usage.`
+        : error.message,
+      syncStatus: error.code,
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   const nextAccount = { ...account, claudeUsage: usage };
@@ -406,61 +432,105 @@ async function runClaudeStatuslineProbe() {
   const child = spawn("script", ["-qfec", command, "/dev/null"], {
     cwd: __dirname,
     env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
-    stdio: ["pipe", "ignore", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
+  let stdout = "";
   let stderr = "";
   let settled = false;
   let promptSent = false;
   const deadlineMs = 90_000;
+  const firstPayloadDeadlineMs = 30_000;
 
   return new Promise((resolve, reject) => {
     const deadline = setTimeout(() => {
-      finish(new Error("Timed out syncing Claude usage"));
+      finish(new ClaudeSyncUnavailableError("Timed out waiting for Claude Code status-line usage"));
     }, deadlineMs);
+    const firstPayloadDeadline = setTimeout(() => {
+      finish(new ClaudeSyncUnavailableError("Claude Code did not emit status-line usage. It may be rate limited."));
+    }, firstPayloadDeadlineMs);
 
     const promptTimer = setTimeout(() => {
       promptSent = true;
-      child.stdin.write("Reply with only: ok\r");
+      safeWrite("Reply with only: ok\r");
     }, 1500);
 
     const pollTimer = setInterval(async () => {
       try {
-        if (!existsSync(capturePath)) return;
-        const raw = JSON.parse(await readFile(capturePath, "utf8"));
-        if (!raw.rate_limits?.five_hour && !raw.rate_limits?.seven_day) return;
-        finish(null, normalizeClaudeStatuslineUsage(raw));
+        const usage = await readCapturedUsage();
+        if (usage) finish(null, usage);
       } catch {
         // Status-line command may be rewriting the file while we poll it.
       }
     }, 500);
 
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      const rateLimitError = detectClaudeRateLimit(stdout);
+      if (rateLimitError) finish(rateLimitError);
+    });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+      const rateLimitError = detectClaudeRateLimit(stderr);
+      if (rateLimitError) finish(rateLimitError);
     });
     child.on("error", (error) => {
       finish(error);
     });
-    child.on("exit", (code) => {
+    child.on("exit", async (code) => {
       if (!settled) {
-        finish(new Error(stderr.trim() || `Claude status-line probe exited with code ${code}`));
+        const usage = await readCapturedUsage().catch(() => null);
+        if (usage) {
+          finish(null, usage);
+          return;
+        }
+        const output = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+        finish(detectClaudeRateLimit(output) || new Error(output || `Claude status-line probe exited with code ${code}`));
       }
     });
+
+    async function readCapturedUsage() {
+      if (!existsSync(capturePath)) return null;
+      const raw = JSON.parse(await readFile(capturePath, "utf8"));
+      if (!raw.rate_limits?.five_hour && !raw.rate_limits?.seven_day) return null;
+      return normalizeClaudeStatuslineUsage(raw);
+    }
+
+    function safeWrite(input) {
+      if (child.stdin.destroyed || child.stdin.writableEnded) return;
+      try {
+        child.stdin.write(input, () => {});
+      } catch {
+        // The PTY may close while we are already settling the probe.
+      }
+    }
 
     function finish(error, value) {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
+      clearTimeout(firstPayloadDeadline);
       clearTimeout(promptTimer);
       clearInterval(pollTimer);
       if (!child.killed) {
-        if (promptSent) child.stdin.write("/exit\r");
+        if (promptSent) safeWrite("/exit\r");
         setTimeout(() => child.kill("SIGTERM"), 1000);
       }
       if (error) reject(error);
       else resolve(value);
     }
   });
+}
+
+function detectClaudeRateLimit(output) {
+  const text = String(output || "");
+  if (!/(rate limit|usage limit|limit reached|too many requests|429)/i.test(text)) return null;
+  const resetMatch = text.match(/\b(?:try again|resets?|reset|available)\s+(?:at|after|in)?\s*([^\n\r.]+)/i);
+  const suffix = resetMatch ? ` (${resetMatch[1].trim()})` : "";
+  return new ClaudeSyncUnavailableError(
+    `Claude Code is rate limited${suffix} and did not emit fresh status-line usage.`,
+    "claude_rate_limited",
+  );
 }
 
 function normalizeClaudeStatuslineUsage(raw) {
