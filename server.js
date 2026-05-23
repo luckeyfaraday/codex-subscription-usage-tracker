@@ -121,6 +121,13 @@ function dedicatedCodexHomeFor(account) {
   return path.join(os.homedir(), ".codex-accounts", `${slug}-${suffix}`);
 }
 
+function codexLoginCommand(codexHome) {
+  if (process.platform === "win32") {
+    return `set "CODEX_HOME=${codexHome}" && codex login --device-auth`;
+  }
+  return `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`;
+}
+
 async function copySharedCodexLogin(sourceHome, targetHome) {
   await mkdir(targetHome, { recursive: true, mode: 0o700 });
   const sourceAuth = path.join(sourceHome, "auth.json");
@@ -184,7 +191,7 @@ async function queryCodexAccount(account) {
       codexHome,
       status: "missing_home",
       error: `CODEX_HOME does not exist: ${codexHome}`,
-      loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+      loginCommand: codexLoginCommand(codexHome),
     });
   }
   if (!existsSync(path.join(codexHome, "auth.json"))) {
@@ -194,7 +201,7 @@ async function queryCodexAccount(account) {
       codexHome,
       status: "not_logged_in",
       error: `No auth.json found in ${codexHome}`,
-      loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+      loginCommand: codexLoginCommand(codexHome),
     });
   }
 
@@ -211,7 +218,7 @@ async function queryCodexAccount(account) {
         expectedEmail: account.expectedEmail,
         error: `Expected ${account.expectedEmail}, but ${codexHome} is logged in as ${actualEmail}`,
         usageSource: result.usageSource || "direct",
-        loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+        loginCommand: codexLoginCommand(codexHome),
         updatedAt: new Date().toISOString(),
       });
     }
@@ -226,7 +233,7 @@ async function queryCodexAccount(account) {
       rateLimitsByLimitId: result.rateLimitsByLimitId || null,
       usageSource: result.usageSource || "direct",
       rawUsage: result.rawUsage || null,
-      loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+      loginCommand: codexLoginCommand(codexHome),
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -244,7 +251,7 @@ async function queryCodexAccount(account) {
           error: `Expected ${account.expectedEmail}, but ${codexHome} is logged in as ${actualEmail}`,
           usageSource: "app-server-fallback",
           sourceWarning: error.message,
-          loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+          loginCommand: codexLoginCommand(codexHome),
           updatedAt: new Date().toISOString(),
         });
       }
@@ -259,7 +266,7 @@ async function queryCodexAccount(account) {
         rateLimitsByLimitId: fallback.rateLimitsByLimitId || null,
         usageSource: "app-server-fallback",
         sourceWarning: error.message,
-        loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+        loginCommand: codexLoginCommand(codexHome),
         updatedAt: new Date().toISOString(),
       });
     } catch (fallbackError) {
@@ -269,7 +276,7 @@ async function queryCodexAccount(account) {
         codexHome,
         status: "error",
         error: `${error.message}; fallback failed: ${fallbackError.message}`,
-        loginCommand: `CODEX_HOME=${shellQuote(codexHome)} codex login --device-auth`,
+        loginCommand: codexLoginCommand(codexHome),
       });
     }
   }
@@ -424,16 +431,12 @@ async function runClaudeStatuslineProbe() {
   await writeJson(settingsPath, {
     statusLine: {
       type: "command",
-      command: `node ${shellQuote(CLAUDE_STATUSLINE_CAPTURE)} ${shellQuote(capturePath)}`,
+      command: statuslineCaptureCommand(capturePath),
     },
   });
 
-  const command = `claude --settings ${shellQuote(settingsPath)} --model haiku --effort low`;
-  const child = spawn("script", ["-qfec", command, "/dev/null"], {
-    cwd: __dirname,
-    env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const probe = spawnClaudeStatuslineProbe(settingsPath);
+  const child = probe.child;
 
   let stdout = "";
   let stderr = "";
@@ -451,6 +454,7 @@ async function runClaudeStatuslineProbe() {
     }, firstPayloadDeadlineMs);
 
     const promptTimer = setTimeout(() => {
+      if (!probe.sendsInput) return;
       promptSent = true;
       safeWrite("Reply with only: ok\r");
     }, 1500);
@@ -512,7 +516,7 @@ async function runClaudeStatuslineProbe() {
       clearTimeout(firstPayloadDeadline);
       clearTimeout(promptTimer);
       clearInterval(pollTimer);
-      if (!child.killed) {
+      if (probe.sendsInput && !child.killed) {
         if (promptSent) safeWrite("/exit\r");
         setTimeout(() => child.kill("SIGTERM"), 1000);
       }
@@ -531,6 +535,44 @@ function detectClaudeRateLimit(output) {
     `Claude Code is rate limited${suffix} and did not emit fresh status-line usage.`,
     "claude_rate_limited",
   );
+}
+
+function statuslineCaptureCommand(capturePath) {
+  if (process.platform === "win32") {
+    return `${windowsShellQuote(process.execPath)} ${windowsShellQuote(CLAUDE_STATUSLINE_CAPTURE)} ${windowsShellQuote(capturePath)}`;
+  }
+  return `${shellQuote(process.execPath)} ${shellQuote(CLAUDE_STATUSLINE_CAPTURE)} ${shellQuote(capturePath)}`;
+}
+
+function spawnClaudeStatuslineProbe(settingsPath) {
+  if (process.platform === "win32") {
+    const args = ["--settings", settingsPath, "--model", "haiku", "--effort", "low", "Reply with only: ok"];
+    const claude = resolveClaudeCommand(args);
+    const child = spawn("powershell.exe", ["-NoProfile", "-Command", startProcessCommand(claude.command, claude.args)], {
+      cwd: __dirname,
+      env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    return { child, sendsInput: false, exitIsFatal: true };
+  }
+
+  const args = ["--settings", settingsPath, "--model", "haiku", "--effort", "low"];
+  const command = `claude --settings ${shellQuote(settingsPath)} --model haiku --effort low`;
+  const child = spawn("script", ["-qfec", command, "/dev/null"], {
+    cwd: __dirname,
+    env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  return { child, sendsInput: true, exitIsFatal: true };
+}
+
+function startProcessCommand(command, args) {
+  const quotedArgs = args.map(powershellSingleQuote).join(", ");
+  return `Start-Process -FilePath ${powershellSingleQuote(command)} -WindowStyle Minimized -ArgumentList @(${quotedArgs})`;
+}
+
+function powershellSingleQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function normalizeClaudeStatuslineUsage(raw) {
@@ -593,9 +635,61 @@ async function readClaudeCredentials(credentialsPath) {
   };
 }
 
+function resolveClaudeCommand(args) {
+  const candidates = [
+    process.env.CLAUDE_BIN,
+    path.join(os.homedir(), "AppData", "Roaming", "npm", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"),
+    path.join(os.homedir(), "scoop", "shims", "claude.cmd"),
+    path.join(os.homedir(), "AppData", "Roaming", "npm", "claude.cmd"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    if (candidate.toLowerCase().endsWith(".cmd")) {
+      return {
+        command: process.env.ComSpec || "cmd.exe",
+        args: ["/d", "/s", "/c", `"${candidate}" ${args.map(windowsShellQuote).join(" ")}`],
+      };
+    }
+    return { command: candidate, args };
+  }
+
+  return { command: "claude", args };
+}
+
+function resolveCodexCommand(args) {
+  const codexJs = path.join(os.homedir(), "AppData", "Roaming", "npm", "node_modules", "@openai", "codex", "bin", "codex.js");
+  if (existsSync(codexJs)) {
+    return { command: process.execPath, args: [codexJs, ...args] };
+  }
+
+  const candidates = [
+    process.env.CODEX_BIN,
+    path.join(os.homedir(), "AppData", "Roaming", "npm", "codex.cmd"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    if (candidate.toLowerCase().endsWith(".cmd")) {
+      return {
+        command: process.env.ComSpec || "cmd.exe",
+        args: ["/d", "/s", "/c", `"${candidate}" ${args.map(windowsShellQuote).join(" ")}`],
+      };
+    }
+    return { command: candidate, args };
+  }
+
+  return { command: "codex", args };
+}
+
+function windowsShellQuote(value) {
+  return `"${String(value).replace(/"/g, '\\"')}"`;
+}
+
 function readClaudeAuthStatus() {
   return new Promise((resolve, reject) => {
-    const child = spawn("claude", ["auth", "status", "--json"], {
+    const claude = resolveClaudeCommand(["auth", "status", "--json"]);
+    const child = spawn(claude.command, claude.args, {
       cwd: __dirname,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -751,7 +845,8 @@ async function refreshAccessToken(auth) {
 
 function queryAppServer(codexHome) {
   return new Promise((resolve, reject) => {
-    const child = spawn("codex", ["app-server", "--listen", "stdio://"], {
+    const codex = resolveCodexCommand(["app-server", "--listen", "stdio://"]);
+    const child = spawn(codex.command, codex.args, {
       env: { ...process.env, CODEX_HOME: codexHome },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -996,17 +1091,18 @@ async function testClaudeAccount() {
 function testCodexAccount(account) {
   return new Promise((resolve) => {
     const codexHome = normalizeCodexHome(account.codexHome);
+    const codex = resolveCodexCommand([
+      "exec",
+      "--sandbox",
+      "read-only",
+      "--skip-git-repo-check",
+      "--ignore-rules",
+      "--ephemeral",
+      "Reply with only: tracker-account-ok",
+    ]);
     const child = spawn(
-      "codex",
-      [
-        "exec",
-        "--sandbox",
-        "read-only",
-        "--skip-git-repo-check",
-        "--ignore-rules",
-        "--ephemeral",
-        "Reply with only: tracker-account-ok",
-      ],
+      codex.command,
+      codex.args,
       {
         env: { ...process.env, CODEX_HOME: codexHome },
         cwd: __dirname,
