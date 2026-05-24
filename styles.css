@@ -302,6 +302,14 @@ body {
   animation: spin 900ms linear infinite;
 }
 
+.btn .arrow {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
