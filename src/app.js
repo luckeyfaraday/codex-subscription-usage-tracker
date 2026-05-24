@@ -428,7 +428,7 @@ function renderDial(progress, _label) {
 }
 
 function renderAlert(account) {
-  if (account.status === "ok") return "";
+  if (!account.status || account.status === "ok") return "";
 
   if (account.status === "manual_lockout" && account.manualOverride) {
     return `

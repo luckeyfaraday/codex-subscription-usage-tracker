@@ -481,7 +481,7 @@ async function runClaudeStatuslineProbe() {
     child.on("error", (error) => {
       finish(error);
     });
-    child.on("exit", async (code) => {
+    child.on("close", async (code) => {
       if (!settled) {
         const usage = await readCapturedUsage().catch(() => null);
         if (usage) {
@@ -925,7 +925,7 @@ function queryAppServer(codexHome) {
       }
     });
 
-    child.on("exit", (code) => {
+    child.on("close", (code) => {
       if (!settled) {
         finish(new Error(stderr.trim() || `Codex app-server exited with code ${code}`));
       }
