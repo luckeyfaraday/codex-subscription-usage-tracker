@@ -18,6 +18,7 @@ const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
 const CLAUDE_STATUSLINE_CAPTURE = path.join(__dirname, "scripts", "claude-statusline-capture.js");
 const CHATGPT_USAGE_URL = "https://chatgpt.com/backend-api/codex/usage";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
+const OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const PUBLIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -115,6 +116,22 @@ function isSharedCodexHome(input) {
   return codexHome === path.join(os.homedir(), ".codex");
 }
 
+function normalizeProvider(input) {
+  return ["codex", "claude", "openrouter"].includes(input) ? input : "codex";
+}
+
+function normalizeEnvVarName(input) {
+  const name = String(input || "").trim();
+  if (!name) return "";
+  if (/^sk-or-/i.test(name)) {
+    throw new Error("Store the OpenRouter key in an environment variable, not in account config");
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error("OpenRouter key environment variable must be a valid env var name");
+  }
+  return name;
+}
+
 function dedicatedCodexHomeFor(account) {
   const slug = String(account.name || account.id || "account")
     .toLowerCase()
@@ -157,13 +174,17 @@ async function stabilizeSharedCodexHomes(accounts) {
 
 function createAccount(input) {
   const name = String(input.name || "").trim();
-  const provider = input.provider === "claude" ? "claude" : "codex";
+  const provider = normalizeProvider(input.provider);
   const id = randomUUID();
   let codexHome = normalizeCodexHome(input.codexHome);
   const claudeHome = normalizeCodexHome(input.claudeHome || path.join(os.homedir(), ".claude"));
+  const openrouterKeyEnv = normalizeEnvVarName(input.openrouterKeyEnv || input.openrouterApiKeyEnv);
   const expectedEmail = String(input.expectedEmail || "").trim();
   if (!name) throw new Error("Account name is required");
   if (provider === "codex" && !codexHome) throw new Error("CODEX_HOME path is required");
+  if (provider === "openrouter" && !openrouterKeyEnv) {
+    throw new Error("OpenRouter API key environment variable is required");
+  }
   if (provider === "codex" && isSharedCodexHome(codexHome)) {
     codexHome = dedicatedCodexHomeFor({ id, name });
   }
@@ -171,7 +192,9 @@ function createAccount(input) {
     id,
     name,
     provider,
-    ...(provider === "codex" ? { codexHome } : { claudeHome }),
+    ...(provider === "codex" ? { codexHome } : {}),
+    ...(provider === "claude" ? { claudeHome } : {}),
+    ...(provider === "openrouter" ? { openrouterKeyEnv } : {}),
     expectedEmail: expectedEmail || null,
     enabled: input.enabled !== false,
   };
@@ -179,6 +202,7 @@ function createAccount(input) {
 
 async function queryAccount(account) {
   if (account.provider === "claude") return queryClaudeAccount(account);
+  if (account.provider === "openrouter") return queryOpenRouterAccount(account);
   return queryCodexAccount(account);
 }
 
@@ -421,6 +445,177 @@ async function syncClaudeUsageAccount(account) {
 
   const nextAccount = { ...account, claudeUsage: usage };
   return buildClaudeUsageAccount(nextAccount, claudeHome, credentials, status, usage);
+}
+
+async function queryOpenRouterAccount(account) {
+  let openrouterKeyEnv = "";
+  try {
+    openrouterKeyEnv = normalizeEnvVarName(account.openrouterKeyEnv || account.openrouterApiKeyEnv);
+  } catch (error) {
+    return {
+      ...account,
+      provider: "openrouter",
+      status: "error",
+      error: error.message,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  if (!openrouterKeyEnv) {
+    return {
+      ...account,
+      provider: "openrouter",
+      status: "not_logged_in",
+      error: "OpenRouter API key environment variable is not configured",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const apiKey = process.env[openrouterKeyEnv];
+  if (!apiKey) {
+    return {
+      ...account,
+      provider: "openrouter",
+      openrouterKeyEnv,
+      status: "not_logged_in",
+      error: `Missing environment variable: ${openrouterKeyEnv}`,
+      usageSource: "openrouter-key-api",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  try {
+    const keyInfo = await fetchOpenRouterKeyInfo(apiKey);
+    return buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo);
+  } catch (error) {
+    return {
+      ...account,
+      provider: "openrouter",
+      openrouterKeyEnv,
+      status: error.status === 401 || error.status === 403 ? "not_logged_in" : "error",
+      error: error.message,
+      usageSource: "openrouter-key-api",
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+async function fetchOpenRouterKeyInfo(apiKey) {
+  const response = await fetch(OPENROUTER_KEY_URL, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: "application/json",
+      "user-agent": "Athena Usage Tracker/0.2.0",
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    const error = new Error(`OpenRouter key endpoint failed: ${response.status} ${body.slice(0, 160)}`);
+    error.status = response.status;
+    throw error;
+  }
+  const raw = await response.json();
+  if (!raw || typeof raw !== "object" || !raw.data) {
+    throw new Error("OpenRouter key endpoint returned invalid JSON");
+  }
+  return raw.data;
+}
+
+function buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo) {
+  const usedPercent = openRouterUsedPercent(keyInfo);
+  const limitRemaining = numberOrNull(keyInfo.limit_remaining);
+  const rateLimits = {
+    limitId: "openrouter",
+    limitName: keyInfo.label || "OpenRouter",
+    primary: usedPercent === null
+      ? null
+      : {
+          usedPercent,
+          windowDurationMins: openRouterResetWindowMins(keyInfo.limit_reset),
+          resetsAt: openRouterNextReset(keyInfo.limit_reset),
+        },
+    secondary: numberOrNull(keyInfo.usage_weekly) === null
+      ? null
+      : {
+          usedPercent: null,
+          windowDurationMins: 10080,
+          resetsAt: null,
+          usedCredits: numberOrNull(keyInfo.usage_weekly),
+        },
+    credits: {
+      limit: numberOrNull(keyInfo.limit),
+      limitRemaining: numberOrNull(keyInfo.limit_remaining),
+      limitReset: keyInfo.limit_reset || null,
+      includeByokInLimit: keyInfo.include_byok_in_limit ?? null,
+      usage: numberOrNull(keyInfo.usage),
+      usageDaily: numberOrNull(keyInfo.usage_daily),
+      usageWeekly: numberOrNull(keyInfo.usage_weekly),
+      usageMonthly: numberOrNull(keyInfo.usage_monthly),
+      byokUsage: numberOrNull(keyInfo.byok_usage),
+      byokUsageDaily: numberOrNull(keyInfo.byok_usage_daily),
+      byokUsageWeekly: numberOrNull(keyInfo.byok_usage_weekly),
+      byokUsageMonthly: numberOrNull(keyInfo.byok_usage_monthly),
+    },
+    planType: keyInfo.is_free_tier ? "Free tier" : "OpenRouter credits",
+    allowed: limitRemaining === null || limitRemaining > 0,
+    limitReached: limitRemaining !== null && limitRemaining <= 0,
+  };
+
+  return {
+    ...account,
+    provider: "openrouter",
+    openrouterKeyEnv,
+    status: "ok",
+    email: null,
+    planType: rateLimits.planType,
+    rateLimits,
+    rateLimitsByLimitId: { openrouter: rateLimits },
+    usageSource: "openrouter-key-api",
+    rawUsage: {
+      label: keyInfo.label || null,
+      limitReset: keyInfo.limit_reset || null,
+      isFreeTier: keyInfo.is_free_tier ?? null,
+      isManagementKey: keyInfo.is_management_key ?? null,
+      isProvisioningKey: keyInfo.is_provisioning_key ?? null,
+      expiresAt: keyInfo.expires_at || null,
+      rateLimit: keyInfo.rate_limit || null,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function openRouterUsedPercent(keyInfo) {
+  const limit = numberOrNull(keyInfo.limit);
+  if (!limit || limit <= 0) return null;
+  const remaining = numberOrNull(keyInfo.limit_remaining);
+  if (remaining !== null) return ((limit - remaining) / limit) * 100;
+  const usage = numberOrNull(keyInfo.usage);
+  if (usage !== null) return (usage / limit) * 100;
+  return null;
+}
+
+function openRouterResetWindowMins(limitReset) {
+  if (limitReset === "daily") return 1440;
+  if (limitReset === "weekly") return 10080;
+  if (limitReset === "monthly") return 43200;
+  return null;
+}
+
+function openRouterNextReset(limitReset) {
+  if (!["daily", "weekly", "monthly"].includes(limitReset)) return null;
+  const now = new Date();
+  if (limitReset === "daily") {
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) / 1000;
+  }
+  if (limitReset === "weekly") {
+    const day = now.getUTCDay() || 7;
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + (8 - day)) / 1000;
+  }
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) / 1000;
+}
+
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 async function runClaudeStatuslineProbe() {
@@ -1036,7 +1231,11 @@ async function handleApi(req, res) {
       sendJson(res, 404, { error: "Account not found" });
       return;
     }
-    const result = account.provider === "claude" ? await testClaudeAccount() : await testCodexAccount(account);
+    const result = account.provider === "claude"
+      ? await testClaudeAccount()
+      : account.provider === "openrouter"
+        ? await testOpenRouterAccount(account)
+        : await testCodexAccount(account);
     sendJson(res, result.ok ? 200 : 500, result);
     return;
   }
@@ -1086,6 +1285,37 @@ async function testClaudeAccount() {
       stdout: status.loggedIn
         ? `Claude logged in as ${status.email || "unknown"} (${status.subscriptionType || "unknown plan"})`
         : "Claude is not logged in",
+    };
+  } catch (error) {
+    return { ok: false, error: error.message, stdout: "", stderr: "" };
+  }
+}
+
+async function testOpenRouterAccount(account) {
+  let openrouterKeyEnv = "";
+  try {
+    openrouterKeyEnv = normalizeEnvVarName(account.openrouterKeyEnv || account.openrouterApiKeyEnv);
+  } catch (error) {
+    return { ok: false, error: error.message, stdout: "", stderr: "" };
+  }
+  if (!openrouterKeyEnv) {
+    return { ok: false, error: "OpenRouter API key environment variable is not configured", stdout: "", stderr: "" };
+  }
+  const apiKey = process.env[openrouterKeyEnv];
+  if (!apiKey) {
+    return { ok: false, error: `Missing environment variable: ${openrouterKeyEnv}`, stdout: "", stderr: "" };
+  }
+
+  try {
+    const keyInfo = await fetchOpenRouterKeyInfo(apiKey);
+    const label = keyInfo.label || "OpenRouter key";
+    const remaining = numberOrNull(keyInfo.limit_remaining);
+    return {
+      ok: true,
+      stdout: remaining === null
+        ? `${label}: unlimited or no credit limit configured`
+        : `${label}: ${remaining} credits remaining`,
+      stderr: "",
     };
   } catch (error) {
     return { ok: false, error: error.message, stdout: "", stderr: "" };
