@@ -9,6 +9,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8080);
+// Binds to loopback by default so credentials never leave the machine. Set
+// HOST (e.g. 0.0.0.0 or a Tailscale IP) to opt into remote access over a
+// trusted private network. See "Remote access with Tailscale" in the README.
+const HOST = process.env.HOST || "127.0.0.1";
 const DATA_DIR = path.join(__dirname, "data");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
 const CLAUDE_STATUSLINE_CAPTURE = path.join(__dirname, "scripts", "claude-statusline-capture.js");
@@ -1174,6 +1178,10 @@ createServer(async (req, res) => {
   } catch (error) {
     sendJson(res, 500, { error: error.message });
   }
-}).listen(PORT, "127.0.0.1", () => {
-  console.log(`Athena Usage Tracker running at http://127.0.0.1:${PORT}/`);
+}).listen(PORT, HOST, () => {
+  const displayHost = HOST === "0.0.0.0" || HOST === "::" ? "127.0.0.1" : HOST;
+  console.log(`Athena Usage Tracker running at http://${displayHost}:${PORT}/`);
+  if (HOST !== "127.0.0.1" && HOST !== "::1" && HOST !== "localhost") {
+    console.log(`Listening on ${HOST}:${PORT} — reachable from other devices on this network. Only do this on a trusted network (e.g. Tailscale).`);
+  }
 });

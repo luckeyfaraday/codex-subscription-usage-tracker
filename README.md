@@ -29,6 +29,7 @@ Built for developers who rotate between several **ChatGPT Plus / Pro / Team** Co
 - [Requirements](#requirements)
 - [Quick Start](#quick-start)
 - [Desktop Widget](#desktop-widget)
+- [Remote Access with Tailscale](#remote-access-with-tailscale)
 - [Codex Account Setup](#codex-account-setup)
 - [Claude Code Setup](#claude-code-setup)
 - [Account Configuration](#account-configuration)
@@ -163,7 +164,7 @@ Use a custom port if needed:
 PORT=8090 npm start
 ```
 
-The server binds to `127.0.0.1` and serves the static dashboard plus local API routes from `server.js`.
+The server binds to `127.0.0.1` and serves the static dashboard plus local API routes from `server.js`. To reach the dashboard from another device, see [Remote Access with Tailscale](#remote-access-with-tailscale).
 
 ## Desktop Widget
 
@@ -210,6 +211,45 @@ Set `ATHENA_WIDGET_CLICK_THROUGH=false` to keep the window topmost but clickable
 If Chrome is installed somewhere unusual, set `ATHENA_WIDGET_CHROME` to the full `chrome.exe` path.
 
 The launchers start the local server if needed, open a cache-busted Chrome app window, and use an isolated Chrome profile so stale browser state cannot keep showing an older widget. The widget shows the best available account, five-hour usage, weekly usage, reset countdown, account status, and a copyable Codex launch command.
+
+## Remote Access with Tailscale
+
+By default the server binds to `127.0.0.1`, so it is only reachable from the machine it runs on. If you want to check your usage dashboard from a phone, tablet, or another laptop, you can expose it privately over [Tailscale](https://tailscale.com/) without ever putting it on the public internet.
+
+> [!WARNING]
+> The dashboard reads your local Codex, Claude, and OpenRouter credentials and exposes usage data over an **unauthenticated** HTTP endpoint. Only ever expose it on a private network you trust (such as your own tailnet). Never bind it to a public-facing interface.
+
+### Option A — `tailscale serve` (recommended)
+
+This keeps the server on `127.0.0.1` and lets Tailscale proxy it over an authenticated HTTPS connection that only devices on your tailnet can reach. No code or binding changes are needed.
+
+```bash
+# Terminal 1: start the tracker as usual (stays on 127.0.0.1)
+npm start
+
+# Terminal 2: proxy it onto your tailnet
+tailscale serve --bg 8080
+```
+
+Then open the URL Tailscale prints (it looks like `https://<your-machine>.<your-tailnet>.ts.net/`) from any device logged into the same tailnet. Stop sharing with `tailscale serve --https=443 off`.
+
+Because the app stays bound to loopback, nothing is reachable except through Tailscale's encrypted, identity-checked proxy.
+
+### Option B — bind directly to your Tailscale interface
+
+If you prefer to hit the machine's Tailscale IP and port directly, set `HOST` so the server listens on that interface:
+
+```bash
+# Listen on every interface (simplest; relies on Tailscale + your firewall for safety)
+HOST=0.0.0.0 npm start
+
+# Or bind only to this machine's Tailscale IP (find it with: tailscale ip -4)
+HOST=100.x.y.z npm start
+```
+
+Then browse to `http://<tailscale-ip>:8080` (or your `<machine>.<tailnet>.ts.net` name) from another tailnet device. `HOST` combines with `PORT`, so `HOST=0.0.0.0 PORT=8090 npm start` works too.
+
+When `HOST` is set to anything other than loopback, the server prints a reminder that it is reachable from other devices. Prefer Option A, or pair Option B with Tailscale ACLs / a host firewall so only trusted devices can connect.
 
 ## Codex Account Setup
 
