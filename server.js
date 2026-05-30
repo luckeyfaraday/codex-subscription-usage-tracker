@@ -551,7 +551,7 @@ function spawnClaudeStatuslineProbe(settingsPath) {
     const child = spawn("powershell.exe", ["-NoProfile", "-Command", startProcessCommand(claude.command, claude.args)], {
       cwd: __dirname,
       env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     return { child, sendsInput: false, exitIsFatal: true };
   }
@@ -561,7 +561,7 @@ function spawnClaudeStatuslineProbe(settingsPath) {
   const child = spawn("script", ["-qfec", command, "/dev/null"], {
     cwd: __dirname,
     env: { ...process.env, TERM: process.env.TERM || "xterm-256color" },
-    stdio: ["pipe", "ignore", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
   });
   return { child, sendsInput: true, exitIsFatal: true };
 }
