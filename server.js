@@ -19,6 +19,8 @@ const CLAUDE_STATUSLINE_CAPTURE = path.join(__dirname, "scripts", "claude-status
 const CHATGPT_USAGE_URL = "https://chatgpt.com/backend-api/codex/usage";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key";
+const OPENROUTER_KEYS_URL = "https://openrouter.ai/api/v1/keys";
+const OPENROUTER_CREDITS_URL = "https://openrouter.ai/api/v1/credits";
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const PUBLIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -179,6 +181,7 @@ function createAccount(input) {
   let codexHome = normalizeCodexHome(input.codexHome);
   const claudeHome = normalizeCodexHome(input.claudeHome || path.join(os.homedir(), ".claude"));
   const openrouterKeyEnv = normalizeEnvVarName(input.openrouterKeyEnv || input.openrouterApiKeyEnv);
+  const openrouterUsageLog = input.openrouterUsageLog ? normalizeCodexHome(input.openrouterUsageLog) : "";
   const expectedEmail = String(input.expectedEmail || "").trim();
   if (!name) throw new Error("Account name is required");
   if (provider === "codex" && !codexHome) throw new Error("CODEX_HOME path is required");
@@ -194,7 +197,7 @@ function createAccount(input) {
     provider,
     ...(provider === "codex" ? { codexHome } : {}),
     ...(provider === "claude" ? { claudeHome } : {}),
-    ...(provider === "openrouter" ? { openrouterKeyEnv } : {}),
+    ...(provider === "openrouter" ? { openrouterKeyEnv, ...(openrouterUsageLog ? { openrouterUsageLog } : {}) } : {}),
     expectedEmail: expectedEmail || null,
     enabled: input.enabled !== false,
   };
@@ -485,8 +488,11 @@ async function queryOpenRouterAccount(account) {
   }
 
   try {
-    const keyInfo = await fetchOpenRouterKeyInfo(apiKey);
-    return buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo);
+    const [usageInfo, usageLog] = await Promise.all([
+      fetchOpenRouterAccountUsage(apiKey),
+      readOpenRouterUsageLog(account.openrouterUsageLog),
+    ]);
+    return buildOpenRouterUsageAccount(account, openrouterKeyEnv, usageInfo, usageLog);
   } catch (error) {
     return {
       ...account,
@@ -498,6 +504,26 @@ async function queryOpenRouterAccount(account) {
       updatedAt: new Date().toISOString(),
     };
   }
+}
+
+async function fetchOpenRouterAccountUsage(apiKey) {
+  const [currentKey, credits, managedKeys] = await Promise.all([
+    fetchOpenRouterKeyInfo(apiKey),
+    fetchOpenRouterCredits(apiKey).catch((error) => ({ error })),
+    fetchOpenRouterManagedKeys(apiKey).catch((error) => ({ error })),
+  ]);
+  const keys = Array.isArray(managedKeys.keys) && managedKeys.keys.length ? managedKeys.keys : [currentKey];
+  return {
+    currentKey,
+    credits: credits.error ? null : credits,
+    keys,
+    source: Array.isArray(managedKeys.keys) && managedKeys.keys.length
+      ? "openrouter-management-api"
+      : "openrouter-key-api",
+    warning: managedKeys.error
+      ? `OpenRouter management key list unavailable; showing current key only (${managedKeys.error.message})`
+      : null,
+  };
 }
 
 async function fetchOpenRouterKeyInfo(apiKey) {
@@ -521,9 +547,62 @@ async function fetchOpenRouterKeyInfo(apiKey) {
   return raw.data;
 }
 
-function buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo) {
+async function fetchOpenRouterCredits(apiKey) {
+  const response = await fetch(OPENROUTER_CREDITS_URL, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: "application/json",
+      "user-agent": "Athena Usage Tracker/0.2.0",
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    const error = new Error(`OpenRouter credits endpoint failed: ${response.status} ${body.slice(0, 160)}`);
+    error.status = response.status;
+    throw error;
+  }
+  const raw = await response.json();
+  if (!raw || typeof raw !== "object" || !raw.data) {
+    throw new Error("OpenRouter credits endpoint returned invalid JSON");
+  }
+  return raw.data;
+}
+
+async function fetchOpenRouterManagedKeys(apiKey) {
+  const keys = [];
+  const pageSize = 100;
+  for (let offset = 0; offset < 10000; offset += pageSize) {
+    const url = new URL(OPENROUTER_KEYS_URL);
+    url.searchParams.set("offset", String(offset));
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        accept: "application/json",
+        "user-agent": "Athena Usage Tracker/0.2.0",
+      },
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      const error = new Error(`OpenRouter keys endpoint failed: ${response.status} ${body.slice(0, 160)}`);
+      error.status = response.status;
+      throw error;
+    }
+    const raw = await response.json();
+    const page = Array.isArray(raw?.data) ? raw.data : [];
+    keys.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return { keys };
+}
+
+function buildOpenRouterUsageAccount(account, openrouterKeyEnv, usageInfo, usageLog = { records: [], warning: null }) {
+  const keyInfo = buildOpenRouterAccountKeyInfo(usageInfo);
   const usedPercent = openRouterUsedPercent(keyInfo);
   const limitRemaining = numberOrNull(keyInfo.limit_remaining);
+  const usagePeriods = buildOpenRouterUsagePeriods(keyInfo, usageLog.records);
+  const models = aggregateOpenRouterModels(usageLog.records);
+  const totalFromLog = aggregateOpenRouterRecords(usageLog.records);
+  const sourceWarning = [usageInfo.warning, usageLog.warning].filter(Boolean).join(" ");
   const rateLimits = {
     limitId: "openrouter",
     limitName: keyInfo.label || "OpenRouter",
@@ -555,6 +634,8 @@ function buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo) {
       byokUsageDaily: numberOrNull(keyInfo.byok_usage_daily),
       byokUsageWeekly: numberOrNull(keyInfo.byok_usage_weekly),
       byokUsageMonthly: numberOrNull(keyInfo.byok_usage_monthly),
+      totalCredits: numberOrNull(usageInfo.credits?.total_credits),
+      totalUsage: numberOrNull(usageInfo.credits?.total_usage),
     },
     planType: keyInfo.is_free_tier ? "Free tier" : "OpenRouter credits",
     allowed: limitRemaining === null || limitRemaining > 0,
@@ -568,20 +649,230 @@ function buildOpenRouterUsageAccount(account, openrouterKeyEnv, keyInfo) {
     status: "ok",
     email: null,
     planType: rateLimits.planType,
+    openrouter: {
+      keyLabel: keyInfo.label || null,
+      usagePeriods,
+      usageLog: account.openrouterUsageLog || null,
+      models,
+      totals: {
+        costCredits: totalFromLog.count ? totalFromLog.costCredits : numberOrNull(keyInfo.usage),
+        tokens: totalFromLog.count ? totalFromLog.tokens : null,
+      },
+    },
     rateLimits,
     rateLimitsByLimitId: { openrouter: rateLimits },
-    usageSource: "openrouter-key-api",
+    usageSource: usageInfo.source,
+    ...(sourceWarning ? { sourceWarning } : {}),
     rawUsage: {
       label: keyInfo.label || null,
       limitReset: keyInfo.limit_reset || null,
       isFreeTier: keyInfo.is_free_tier ?? null,
       isManagementKey: keyInfo.is_management_key ?? null,
       isProvisioningKey: keyInfo.is_provisioning_key ?? null,
+      keyCount: keyInfo.key_count ?? null,
+      activeKeyCount: keyInfo.active_key_count ?? null,
+      accountCredits: usageInfo.credits || null,
       expiresAt: keyInfo.expires_at || null,
       rateLimit: keyInfo.rate_limit || null,
     },
     updatedAt: new Date().toISOString(),
   };
+}
+
+function buildOpenRouterAccountKeyInfo(usageInfo) {
+  const keys = Array.isArray(usageInfo.keys) ? usageInfo.keys : [];
+  const activeKeys = keys.filter((key) => key?.disabled !== true);
+  const totals = sumOpenRouterKeys(keys);
+  const limit = sumNullable(keys, "limit");
+  const limitRemaining = sumNullable(keys, "limit_remaining");
+  return {
+    ...(usageInfo.currentKey || {}),
+    label: keys.length > 1 ? "All OpenRouter keys" : usageInfo.currentKey?.label || "OpenRouter",
+    limit,
+    limit_remaining: limitRemaining,
+    limit_reset: null,
+    usage: numberOrNull(usageInfo.credits?.total_usage) ?? totals.usage,
+    usage_daily: totals.usage_daily,
+    usage_weekly: totals.usage_weekly,
+    usage_monthly: totals.usage_monthly,
+    byok_usage: totals.byok_usage,
+    byok_usage_daily: totals.byok_usage_daily,
+    byok_usage_weekly: totals.byok_usage_weekly,
+    byok_usage_monthly: totals.byok_usage_monthly,
+    key_count: keys.length,
+    active_key_count: activeKeys.length,
+  };
+}
+
+function sumOpenRouterKeys(keys) {
+  return {
+    usage: sumNumbers(keys, "usage"),
+    usage_daily: sumNumbers(keys, "usage_daily"),
+    usage_weekly: sumNumbers(keys, "usage_weekly"),
+    usage_monthly: sumNumbers(keys, "usage_monthly"),
+    byok_usage: sumNumbers(keys, "byok_usage"),
+    byok_usage_daily: sumNumbers(keys, "byok_usage_daily"),
+    byok_usage_weekly: sumNumbers(keys, "byok_usage_weekly"),
+    byok_usage_monthly: sumNumbers(keys, "byok_usage_monthly"),
+  };
+}
+
+function sumNumbers(items, key) {
+  return items.reduce((sum, item) => sum + (numberOrNull(item?.[key]) ?? 0), 0);
+}
+
+function sumNullable(items, key) {
+  let found = false;
+  const sum = items.reduce((total, item) => {
+    const value = numberOrNull(item?.[key]);
+    if (value === null) return total;
+    found = true;
+    return total + value;
+  }, 0);
+  return found ? sum : null;
+}
+
+async function readOpenRouterUsageLog(input) {
+  const usageLog = input ? normalizeCodexHome(input) : "";
+  if (!usageLog) return { records: [], warning: null };
+  if (!existsSync(usageLog)) {
+    return { records: [], warning: `OpenRouter usage log does not exist: ${usageLog}` };
+  }
+  try {
+    const raw = await readFile(usageLog, "utf8");
+    const records = parseOpenRouterUsageLog(raw);
+    return { records, warning: null };
+  } catch (error) {
+    return { records: [], warning: `Could not read OpenRouter usage log: ${error.message}` };
+  }
+}
+
+function parseOpenRouterUsageLog(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  if (text.startsWith("[")) {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(normalizeOpenRouterUsageRecord).filter(Boolean) : [];
+  }
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => normalizeOpenRouterUsageRecord(JSON.parse(line)))
+    .filter(Boolean);
+}
+
+function normalizeOpenRouterUsageRecord(raw) {
+  const data = raw?.data && typeof raw.data === "object" ? raw.data : raw;
+  if (!data || typeof data !== "object") return null;
+  const createdAt = data.createdAt || data.created_at || data.timestamp || data.ts || null;
+  const createdMs = createdAt ? new Date(createdAt).getTime() : NaN;
+  if (!Number.isFinite(createdMs)) return null;
+  const promptTokens = numberOrNull(data.native_tokens_prompt)
+    ?? numberOrNull(data.tokens_prompt)
+    ?? numberOrNull(data.prompt_tokens)
+    ?? numberOrNull(data.usage?.prompt_tokens)
+    ?? 0;
+  const completionTokens = numberOrNull(data.native_tokens_completion)
+    ?? numberOrNull(data.tokens_completion)
+    ?? numberOrNull(data.completion_tokens)
+    ?? numberOrNull(data.usage?.completion_tokens)
+    ?? 0;
+  const reasoningTokens = numberOrNull(data.native_tokens_reasoning)
+    ?? numberOrNull(data.reasoning_tokens)
+    ?? 0;
+  const totalTokens = numberOrNull(data.total_tokens)
+    ?? numberOrNull(data.usage?.total_tokens)
+    ?? promptTokens + completionTokens + reasoningTokens;
+  const costCredits = numberOrNull(data.total_cost)
+    ?? (typeof data.usage === "number" ? numberOrNull(data.usage) : null)
+    ?? numberOrNull(data.costCredits)
+    ?? numberOrNull(data.cost);
+
+  return {
+    id: data.id || null,
+    createdAt: new Date(createdMs).toISOString(),
+    createdMs,
+    model: data.model || data.router || "unknown",
+    providerName: data.provider_name || data.providerName || null,
+    promptTokens,
+    completionTokens,
+    reasoningTokens,
+    tokens: totalTokens,
+    costCredits,
+  };
+}
+
+function buildOpenRouterUsagePeriods(keyInfo, records = []) {
+  const now = Date.now();
+  const windows = [
+    {
+      id: "30m",
+      label: "Past 30 minutes",
+      sinceMs: now - 30 * 60 * 1000,
+      fallbackCostCredits: null,
+    },
+    {
+      id: "day",
+      label: "Past day",
+      sinceMs: now - 24 * 60 * 60 * 1000,
+      fallbackCostCredits: numberOrNull(keyInfo.usage_daily),
+    },
+    {
+      id: "week",
+      label: "Past Week",
+      sinceMs: now - 7 * 24 * 60 * 60 * 1000,
+      fallbackCostCredits: numberOrNull(keyInfo.usage_weekly),
+    },
+    {
+      id: "month",
+      label: "Past Month",
+      sinceMs: now - 30 * 24 * 60 * 60 * 1000,
+      fallbackCostCredits: numberOrNull(keyInfo.usage_monthly),
+    },
+    {
+      id: "total",
+      label: "Total",
+      sinceMs: 0,
+      fallbackCostCredits: numberOrNull(keyInfo.usage),
+    },
+  ];
+
+  return windows.map((window) => {
+    const matching = records.filter((record) => record.createdMs >= window.sinceMs);
+    const aggregate = aggregateOpenRouterRecords(matching);
+    return {
+      id: window.id,
+      label: window.label,
+      costCredits: aggregate.count ? aggregate.costCredits : window.fallbackCostCredits,
+      tokens: aggregate.count ? aggregate.tokens : null,
+      models: aggregateOpenRouterModels(matching),
+    };
+  });
+}
+
+function aggregateOpenRouterRecords(records) {
+  return records.reduce(
+    (total, record) => ({
+      count: total.count + 1,
+      tokens: total.tokens + (numberOrNull(record.tokens) ?? 0),
+      costCredits: total.costCredits + (numberOrNull(record.costCredits) ?? 0),
+    }),
+    { count: 0, tokens: 0, costCredits: 0 },
+  );
+}
+
+function aggregateOpenRouterModels(records) {
+  const byModel = new Map();
+  for (const record of records) {
+    const key = record.model || "unknown";
+    const current = byModel.get(key) || { model: key, tokens: 0, costCredits: 0, requests: 0 };
+    current.tokens += numberOrNull(record.tokens) ?? 0;
+    current.costCredits += numberOrNull(record.costCredits) ?? 0;
+    current.requests += 1;
+    byModel.set(key, current);
+  }
+  return Array.from(byModel.values()).sort((a, b) => b.costCredits - a.costCredits || b.tokens - a.tokens);
 }
 
 function openRouterUsedPercent(keyInfo) {
@@ -1307,13 +1598,16 @@ async function testOpenRouterAccount(account) {
   }
 
   try {
-    const keyInfo = await fetchOpenRouterKeyInfo(apiKey);
-    const label = keyInfo.label || "OpenRouter key";
+    const usageInfo = await fetchOpenRouterAccountUsage(apiKey);
+    const keyInfo = buildOpenRouterAccountKeyInfo(usageInfo);
+    const label = usageInfo.source === "openrouter-management-api"
+      ? `${keyInfo.key_count || 0} OpenRouter keys`
+      : keyInfo.label || "OpenRouter key";
     const remaining = numberOrNull(keyInfo.limit_remaining);
     return {
       ok: true,
       stdout: remaining === null
-        ? `${label}: unlimited or no credit limit configured`
+        ? `${label}: ${numberOrNull(keyInfo.usage) ?? 0} credits used`
         : `${label}: ${remaining} credits remaining`,
       stderr: "",
     };

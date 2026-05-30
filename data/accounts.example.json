@@ -29,6 +29,7 @@
       "name": "OpenRouter",
       "provider": "openrouter",
       "openrouterKeyEnv": "OPENROUTER_API_KEY_PERSONAL",
+      "openrouterUsageLog": "/home/you/openrouter-usage.jsonl",
       "enabled": true
     }
   ]
