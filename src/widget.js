@@ -172,14 +172,13 @@ function renderFocus() {
   els.bestName.textContent = account.name || "Account";
 
   if (isOpenRouter) {
-    const month = getOpenRouterPeriod(account, "month");
+    const day = getOpenRouterPeriod(account, "day");
     const week = getOpenRouterPeriod(account, "week");
-    const total = getOpenRouterPeriod(account, "total");
-    els.primaryLabel.textContent = "Month cost";
+    els.primaryLabel.textContent = "Day cost";
     els.primaryUnit.textContent = "";
-    els.primaryUsage.textContent = compactCost(month?.costCredits);
+    els.primaryUsage.textContent = compactCost(day?.costCredits);
     setBar(els.primaryMeter, null, "is-muted");
-    els.readoutMeta.textContent = `Total ${formatCost(total?.costCredits)}`;
+    els.readoutMeta.textContent = `Week ${formatCost(week?.costCredits)}`;
     els.secondaryLabel.textContent = "Week";
     els.weeklyUsage.textContent = compactCost(week?.costCredits);
     setBar(els.secondaryMeter, null, "is-muted");
@@ -237,7 +236,7 @@ function renderLedger() {
 
     const ledTone = isLive ? worst : primaryTone;
     const pctText = isOpenRouter
-      ? compactCost(getOpenRouterPeriod(account, "month")?.costCredits)
+      ? compactCost(getOpenRouterPeriod(account, "day")?.costCredits)
       : pct === null ? "—" : `${Math.floor(pct)}%`;
     const barTone = toneClass(worst, isLive);
 
