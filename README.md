@@ -33,6 +33,7 @@ Built for developers who rotate between several **ChatGPT Plus / Pro / Team** Co
 - [Codex Account Setup](#codex-account-setup)
 - [Claude Code Setup](#claude-code-setup)
 - [Account Configuration](#account-configuration)
+- [Local Environment](#local-environment)
 - [Local API](#local-api)
 - [Data and Privacy](#data-and-privacy)
 - [Project Structure](#project-structure)
@@ -367,6 +368,34 @@ Example:
   ]
 }
 ```
+
+## Local Environment
+
+The server automatically loads `.env` and `.env.local` from the project root on startup. Shell environment variables still take priority, so command-line overrides like `PORT=8092 npm start` keep working.
+
+Copy the example and fill in local secrets:
+
+```bash
+cp .env.example .env
+```
+
+For OpenRouter accounts, store the API key in `.env` and reference only the variable name in the account config:
+
+```bash
+OPENROUTER_API_KEY_PERSONAL=sk-or-...
+```
+
+`data/accounts.json` should contain the env var name, not the key:
+
+```json
+{
+  "name": "OpenRouter",
+  "provider": "openrouter",
+  "openrouterKeyEnv": "OPENROUTER_API_KEY_PERSONAL"
+}
+```
+
+Both `.env` and `.env.local` are ignored by git.
 
 ## Local API
 

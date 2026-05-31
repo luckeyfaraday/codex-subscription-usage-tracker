@@ -2,12 +2,15 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+loadEnvFiles([".env", ".env.local"]);
+
 const PORT = Number(process.env.PORT || 8080);
 // Binds to loopback by default so credentials never leave the machine. Set
 // HOST (e.g. 0.0.0.0 or a Tailscale IP) to opt into remote access over a
@@ -36,6 +39,29 @@ const NO_STORE_HEADERS = {
   pragma: "no-cache",
   expires: "0",
 };
+
+function loadEnvFiles(files) {
+  const shellEnv = new Set(Object.keys(process.env));
+  for (const name of files) {
+    const file = path.join(__dirname, name);
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)?\s*$/);
+      if (!match || shellEnv.has(match[1])) continue;
+      process.env[match[1]] = parseEnvValue(match[2] || "");
+    }
+  }
+}
+
+function parseEnvValue(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
+  return trimmed.replace(/\s+#.*$/, "");
+}
 
 class ClaudeSyncUnavailableError extends Error {
   constructor(message, code = "claude_sync_unavailable") {
